@@ -1,0 +1,57 @@
+{
+  "index_patterns": ["guardian-traffic-*"],
+  "priority": 100,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.mapping.ignore_malformed": true
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "event": {
+          "properties": {
+            "id":   { "type": "keyword" },
+            "type": { "type": "keyword" }
+          }
+        },
+        "source": {
+          "properties": {
+            "service": { "type": "keyword" }
+          }
+        },
+        "network": {
+          "properties": {
+            "client_ip": { "type": "ip" }
+          }
+        },
+        "transaction": {
+          "properties": {
+            "payer_id":   { "type": "keyword" },
+            "payee_id":   { "type": "keyword" },
+            "channel":    { "type": "keyword" },
+            "amount":     { "type": "double" },
+            "currency":   { "type": "keyword" },
+            "status":     { "type": "keyword" },
+            "latency_ms": { "type": "float" }
+          }
+        },
+        "security": {
+          "properties": {
+            "is_attack":      { "type": "boolean" },
+            "attack_pattern": { "type": "keyword" },
+            "is_malformed":   { "type": "boolean" }
+          }
+        },
+        "error": { "type": "boolean" },
+        "ingest": {
+          "properties": {
+            "pipeline_stage": { "type": "keyword" },
+            "processed_at":   { "type": "date" }
+          }
+        }
+      }
+    }
+  }
+}

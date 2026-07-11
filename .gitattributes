@@ -1,0 +1,9 @@
+# Normalize line endings; shell scripts MUST be LF or they break inside containers
+* text=auto
+*.sh text eol=lf
+*.py text
+*.yml text
+*.yaml text
+*.json text
+*.md text
+Dockerfile text

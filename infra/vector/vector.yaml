@@ -1,0 +1,73 @@
+# Vector pipeline: Redpanda topic → normalize (VRL) → OpenSearch.
+# Owned by feat/infra-pipeline. Field mapping contract: docs/architecture.md#normalized-fields
+# This is a working skeleton — refine VRL with `vector vrl` REPL as needed.
+
+sources:
+  telemetry_raw:
+    type: kafka
+    bootstrap_servers: redpanda:9092
+    group_id: guardian-vector
+    topics:
+      - guardian.telemetry.raw
+    decoding:
+      codec: json
+
+transforms:
+  normalize:
+    type: remap
+    inputs: [telemetry_raw]
+    source: |
+      ev = object!(.)
+      out = {}
+
+      out."@timestamp" = parse_timestamp(string(ev.timestamp) ?? "", "%+") ?? now()
+      out.event = {
+        "id":   ev.event_id,
+        "type": ev.event_type
+      }
+      out.source = { "service": ev.source }
+      out.network = { "client_ip": ev.client_ip }
+      out.transaction = {
+        "payer_id":   ev.payer_id,
+        "payee_id":   ev.payee_id,
+        "channel":    ev.channel,
+        "amount":     ev.amount,
+        "currency":   ev.currency,
+        "status":     ev.status,
+        "latency_ms": ev.latency_ms
+      }
+      out.security = {
+        "is_attack":      bool(ev.is_attack) ?? false,
+        "attack_pattern": ev.attack_pattern,
+        "is_malformed":   !(bool(ev.raw_payload_valid) ?? true)
+      }
+
+      status = string(ev.status) ?? "unknown"
+      out.error = includes(["declined", "error", "malformed"], status)
+
+      out.ingest = {
+        "pipeline_stage": "vector",
+        "processed_at":   now()
+      }
+
+      . = out
+
+sinks:
+  opensearch_out:
+    type: elasticsearch
+    inputs: [normalize]
+    endpoints: ["https://opensearch:9200"]
+    mode: bulk
+    api_version: v7
+    bulk:
+      index: "guardian-traffic-%Y.%m.%d"
+    auth:
+      strategy: basic
+      user: admin
+      password: "${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}"
+    tls:
+      verify_certificate: false
+      verify_hostname: false
+    # OpenSearch reports a non-ES version string; skip the ES healthcheck handshake
+    healthcheck:
+      enabled: false

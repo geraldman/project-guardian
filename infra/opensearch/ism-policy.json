@@ -1,0 +1,30 @@
+{
+  "policy": {
+    "policy_id": "guardian-traffic-ilm",
+    "description": "Demo-scale lifecycle for guardian-traffic indices: daily indices (created by Vector's date-suffixed index name) are deleted after 7 days. Rollover-by-time is achieved via the daily naming; ISM handles retention.",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": { "min_index_age": "7d" }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [{ "delete": {} }],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": ["guardian-traffic-*"],
+        "priority": 100
+      }
+    ]
+  }
+}

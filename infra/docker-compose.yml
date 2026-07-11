@@ -1,0 +1,170 @@
+# Project GUARDIAN — full stack definition.
+# All services are declared here (including ones whose internals land on feature
+# branches) so no branch ever needs to edit this shared file.
+#
+# Image pins verified against Docker Hub on 2026-07-12.
+
+name: guardian
+
+networks:
+  guardian-net:
+    driver: bridge
+
+volumes:
+  redpanda-data:
+  opensearch-data:
+
+services:
+  # ── Queue ────────────────────────────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v26.1.12
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      # internal listener for containers, external for host-side debugging (kcat/rpk)
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --schema-registry-addr=0.0.0.0:8081
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - "19092:19092" # Kafka API (host access)
+      - "9644:9644"   # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks: [guardian-net]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redpanda-console:
+    image: redpandadata/console:v3.8.0
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8080:8080"
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # ── Storage / SIEM ───────────────────────────────────────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.19.6
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=false
+      # 512m heap keeps the whole stack laptop-friendly; raise if Docker VM has >8GB
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks: [guardian-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk -u admin:$${OPENSEARCH_INITIAL_ADMIN_PASSWORD} https://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.19.6
+    environment:
+      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
+      OPENSEARCH_USERNAME: admin
+      OPENSEARCH_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}
+      OPENSEARCH_SSL_VERIFICATIONMODE: none
+    ports:
+      - "5601:5601"
+    networks: [guardian-net]
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u admin:$${OPENSEARCH_PASSWORD} http://localhost:5601/api/status | grep -q '\"state\":\"green\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  # one-shot bootstrap: index template + ISM policy + (when present) dashboards import
+  opensearch-init:
+    image: curlimages/curl:latest
+    volumes:
+      - ./opensearch:/init/opensearch:ro
+      - ./opensearch-init:/init/scripts:ro
+      - ./dashboards:/init/dashboards:ro
+    environment:
+      OPENSEARCH_URL: https://opensearch:9200
+      DASHBOARDS_URL: http://opensearch-dashboards:5601
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}
+    entrypoint: ["/bin/sh", "/init/scripts/init.sh"]
+    networks: [guardian-net]
+    restart: "no"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+
+  # ── Normalization ────────────────────────────────────────────────────────
+  vector:
+    image: timberio/vector:0.56.0-debian
+    command: ["--config", "/etc/vector/vector.yaml"]
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+    environment:
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+
+  # ── Digital twin + ingestion boundary ───────────────────────────────────
+  mock-lti:
+    build: ../services/mock-lti
+    ports:
+      - "8000:8000"
+    environment:
+      EVENTS_PER_SECOND: ${EVENTS_PER_SECOND:-10}
+      ATTACK_MODE: ${ATTACK_MODE:-mixed}
+      CAPTURE_INGEST_URL: http://capture-agent:8001/ingest
+    networks: [guardian-net]
+    depends_on:
+      - capture-agent
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  capture-agent:
+    build: ../services/capture
+    ports:
+      - "8001:8001"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      TELEMETRY_TOPIC: guardian.telemetry.raw
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

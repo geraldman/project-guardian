@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Node (dashboard, Week 4)
+node_modules/
+.next/
+dist/
+out/
+
+# Env & secrets — compose reads OPENSEARCH_ADMIN_PASSWORD from .env if present
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code local state
+.claude/
+
+# AI disclaimer
+docs/AI_USAGE_DISCLOSURE.md
+
+# Data / artifacts
+*.log
+.ipynb_checkpoints/
+training/datasets/

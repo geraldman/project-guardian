@@ -1,0 +1,4 @@
+# Thin root compose so `docker compose up` works from the repo root.
+# The canonical stack definition lives in infra/docker-compose.yml.
+include:
+  - path: infra/docker-compose.yml
