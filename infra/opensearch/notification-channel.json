@@ -1,0 +1,14 @@
+{
+  "config_id": "guardian-alerting-webhook",
+  "config": {
+    "name": "GUARDIAN alerting service",
+    "description": "Routes OpenSearch monitor alerts through the alerting service's dedup path instead of straight to Slack",
+    "config_type": "webhook",
+    "is_enabled": true,
+    "webhook": {
+      "url": "http://alerting:8003/notify",
+      "method": "POST",
+      "header_params": { "Content-Type": "application/json" }
+    }
+  }
+}

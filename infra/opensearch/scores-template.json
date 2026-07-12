@@ -1,0 +1,52 @@
+{
+  "index_patterns": ["guardian-scores-*"],
+  "priority": 100,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.mapping.ignore_malformed": true
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "score": {
+          "properties": {
+            "model":         { "type": "keyword" },
+            "entity_type":   { "type": "keyword" },
+            "entity_id":     { "type": "keyword" },
+            "anomaly_score": { "type": "float" },
+            "is_anomalous":  { "type": "boolean" },
+            "warming_up":    { "type": "boolean" },
+            "reasons":       { "type": "keyword" },
+            "features": {
+              "properties": {
+                "event_count":        { "type": "integer" },
+                "mean_payload_bytes": { "type": "float" },
+                "mean_amount":        { "type": "double" },
+                "error_ratio":        { "type": "float" },
+                "malformed_count":    { "type": "integer" }
+              }
+            },
+            "baseline": {
+              "properties": {
+                "rate_mean":        { "type": "float" },
+                "rate_std":         { "type": "float" },
+                "payload_mean":     { "type": "float" },
+                "payload_std":      { "type": "float" },
+                "buckets_observed": { "type": "integer" }
+              }
+            },
+            "window": {
+              "properties": {
+                "start":            { "type": "date" },
+                "end":              { "type": "date" },
+                "duration_seconds": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

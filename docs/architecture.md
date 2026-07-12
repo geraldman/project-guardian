@@ -17,16 +17,29 @@ Redpanda                              topic guardian.telemetry.raw
      │  consume (group guardian-vector)
      ▼
 Vector                                parse + normalize + enrich (VRL)
-     │  bulk index
-     ▼
-OpenSearch                            guardian-traffic-YYYY.MM.DD daily indices, ISM retention
-     │
-     ▼
-OpenSearch Dashboards                 "Guardian Traffic Overview" single pane of glass
+     │  bulk index                        │  produce (fan-out)
+     ▼                                    ▼
+OpenSearch                            guardian.telemetry.normalized
+     │                                    │  consume (group guardian-argus)
+     ▼                                    ▼
+OpenSearch Dashboards             argus (FastAPI + aiokafka)   1-min buckets, baselines, anomaly scores
+                                          │ produce                    │ produce (anomalies only)
+                                          ▼                            ▼
+                                  guardian.scores              guardian.alerts
+                                          │ Vector → OpenSearch        │ ├─ Vector → OpenSearch (guardian-alerts-*)
+                                          ▼                            │ └─ alerting (5-min dedup → Slack/Discord)
+                                  guardian-scores-*                    ▼
 ```
 
-Extra-credit layers (later weeks): ARGUS / SENTINEL / CASSANDRA scorer microservices,
-alerting (5-min dedup → Slack/Discord), Guardian Pulse HUD. See each service's README.
+Vector is the single OpenSearch write path: ARGUS never talks to OpenSearch directly —
+it is pure Kafka-in/Kafka-out, and Vector carries score/alert documents into their
+indices. OpenSearch Alerting monitors (e.g. `guardian-error-rate-spike`) post into the
+alerting service's `/notify` endpoint via a notification channel, so SIEM-native alerts
+share the same dedup window as ARGUS alerts.
+
+Extra-credit layers still to come (later weeks): SENTINEL / CASSANDRA scorer
+microservices (they will consume `guardian.telemetry.normalized` exactly like ARGUS),
+Guardian Pulse HUD. See each service's README.
 
 ## Port / hostname allocations (contract)
 
@@ -40,9 +53,22 @@ alerting (5-min dedup → Slack/Discord), Guardian Pulse HUD. See each service's
 | Redpanda Console | `redpanda-console` | 8080 | 8080 |
 | OpenSearch | `opensearch` | 9200 (https) | 9200 |
 | OpenSearch Dashboards | `opensearch-dashboards` | 5601 | 5601 |
+| ARGUS | `argus` | 8002 | 8002 |
+| alerting | `alerting` | 8003 | 8003 |
 
-Queue: topic `guardian.telemetry.raw`, 3 partitions, ~6h retention (OpenSearch is the
+Queue topics (all 3 partitions, replication 1, ~6h retention — OpenSearch is the
 durable store). Network: single bridge `guardian-net`.
+
+| Topic | Producer | Consumers (group) |
+|---|---|---|
+| `guardian.telemetry.raw` | capture-agent | Vector (`guardian-vector`) |
+| `guardian.telemetry.normalized` | Vector | ARGUS (`guardian-argus`), later SENTINEL/CASSANDRA |
+| `guardian.scores` | ARGUS | Vector (`guardian-vector-scores`) → `guardian-scores-*` |
+| `guardian.alerts` | ARGUS | alerting (`guardian-alerting`), Vector (`guardian-vector-alerts`) → `guardian-alerts-*` |
+
+Topic bootstrap: capture-agent creates `guardian.telemetry.raw`; ARGUS creates
+`guardian.telemetry.normalized`, `guardian.scores` and `guardian.alerts`; the alerting
+service also ensures `guardian.alerts` (idempotent creates, first one up wins).
 
 ## Event schema
 
@@ -117,12 +143,77 @@ OpenSearch document below; mappings are pinned by
 The error-rate visualization aggregates on `error`; traffic-volume splits on
 `event.type` / `security.is_attack`.
 
+## Detection layer
+
+ARGUS consumes `guardian.telemetry.normalized` and aggregates events into **1-minute
+tumbling buckets** per entity. Entity model:
+
+| `entity_type` | `entity_id` | Baseline |
+|---|---|---|
+| `global` | `global` | EW mean/var of its own bucket history |
+| `payer` | `transaction.payer_id` | EW mean/var of its own bucket history |
+| `client_ip` | `network.client_ip` | **cohort** stats (all per-IP bucket counts) — random synthetic IPs rarely repeat, so per-IP history is useless but a flood IP towers over the cohort |
+
+Per-bucket features: `event_count`, `mean_payload_bytes` (raw Kafka message size),
+`mean_amount` (abs), `error_ratio`, `malformed_count`. Detectors: per-entity/cohort
+z-score (threshold 3σ), plus an Isolation Forest and k-NN distance fit on a rolling
+window of recent bucket vectors. `anomaly_score` ∈ [0, 1] (z of 3σ ≈ 0.5, ≥6σ = 1.0).
+
+**Warmup:** an entity emits no alerts until `WARMUP_BUCKETS` (default 15) buckets of
+history exist; scores are still emitted with `warming_up: true`. The production design
+is a 7-day rolling window — the demo compresses this via env so a fresh stack is live
+in ~15 minutes, or immediately after `training/seed_baseline.py` replays backdated
+benign traffic through capture-agent.
+
+### Score document (topic `guardian.scores` → index `guardian-scores-*`)
+
+Every finalized bucket for `global`, plus per-entity buckets that are anomalous or have
+≥3 events (volume floor). Shape (flattened): `@timestamp` (bucket end), `score.model`
+(`"argus"`), `score.entity_type/entity_id`, `score.anomaly_score`, `score.is_anomalous`,
+`score.warming_up`, `score.reasons[]` (e.g. `"rate_z=5.2>3.0"`), `score.features.*`,
+`score.baseline.*` (`rate_mean/rate_std/payload_mean/payload_std/buckets_observed`),
+`score.window.start/end/duration_seconds`. Mappings pinned by
+`infra/opensearch/scores-template.json`.
+
+### Alert message (topic `guardian.alerts` → alerting service + `guardian-alerts-*`)
+
+Emitted only for anomalous, post-warmup buckets:
+
+```json
+{
+  "@timestamp": "2026-07-12T08:41:00Z",
+  "alert": {
+    "id": "0d9c…",
+    "type": "rate_spike",
+    "severity": "high",
+    "entity_type": "client_ip",
+    "entity_id": "10.2.14.9",
+    "score": 0.93,
+    "source": "argus",
+    "summary": "Request rate for client_ip 10.2.14.9 is 14.1x its cohort baseline (312 events/min, cohort mean 2.1).",
+    "window": { "start": "2026-07-12T08:40:00Z", "end": "2026-07-12T08:41:00Z" },
+    "details": { "rate_z": 9.4 }
+  }
+}
+```
+
+`alert.type` ∈ `rate_spike | payload_anomaly | error_ratio_spike | multivariate_outlier |
+error_rate_spike` (the last emitted by the OpenSearch monitor, `source:
+"opensearch-monitor"`). `severity` ∈ `low | medium | high`. Mappings pinned by
+`infra/opensearch/alerts-template.json`. The alerting service dedups on
+`(entity_type, entity_id, type)` within `DEDUP_SECONDS` (default 300) and posts to
+Slack (`SLACK_WEBHOOK_URL`) and/or Discord (`DISCORD_WEBHOOK_URL`); with neither set it
+runs in log-only mode.
+
 ## Index lifecycle
 
 Daily indices `guardian-traffic-%Y.%m.%d` (time-based rollover via naming); ISM policy
 `guardian-traffic-ilm` deletes indices older than 7 days. 1 shard / 0 replicas —
 single-node cluster, replicas would only turn cluster health yellow. Demo-scale on
 purpose; production-scale retention math is out of scope for the MVP.
+`guardian-scores-*` / `guardian-alerts-*` follow the same daily-naming scheme but skip
+ISM — their volume is a tiny fraction of traffic's and alert history is exactly what a
+compliance reviewer wants kept.
 
 ## Deliberate deviations from the brief's suggested stack
 
@@ -150,3 +241,15 @@ purpose; production-scale retention math is out of scope for the MVP.
 The compose file declares every service up front, and this document pins the
 cross-service contracts (schema, ports, topic, normalized fields), so the branches
 never need to touch each other's files.
+
+## Branch ownership (Week 2)
+
+`feat/w2-contracts-infra` lands first (this document's detection-layer contracts,
+compose entries, Vector fan-out, index templates, init.sh); the rest build on it:
+
+| Branch | Exclusively owns |
+|---|---|
+| `feat/argus` | `services/argus/**`, `training/**` |
+| `feat/alerting` | `services/alerting/**` |
+| `feat/dashboards-w2` | `infra/dashboards/detection_objects.ndjson` |
+| `feat/docs-w2` | `docs/*_manual.md` |
