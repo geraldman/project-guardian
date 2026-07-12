@@ -13,13 +13,18 @@ deliberate deviation in docs/architecture.md.
 
 Branch: **feat/capture-agent** owns `services/capture/**`.
 
-To build here (Phase 0 has only `/health` + a validating `/ingest` stub):
+How it works:
 - `app/producer.py` — `aiokafka.AIOKafkaProducer` created once in FastAPI lifespan,
-  `acks=1`, small `linger_ms` batching; `send_and_wait` first for debuggability
-  (fire-and-forget `send()` is the later throughput knob)
-- Wire `/ingest` to the producer, keep 202 semantics
-- Topic bootstrap: ensure `guardian.telemetry.raw` exists (3 partitions, ~6h retention —
-  OpenSearch is the durable store, not the queue)
+  `acks=1`, small `linger_ms` batching; `send_and_wait` for debuggability
+  (fire-and-forget `send()` is the later throughput knob). Connects in a background
+  retry/backoff loop so the app comes up degraded (not crash-looping) while Redpanda
+  is still booting; clean shutdown flushes and stops the producer.
+- Topic bootstrap on first broker contact: ensures `guardian.telemetry.raw` exists
+  (3 partitions, replication 1, `retention.ms=21600000` — OpenSearch is the durable
+  store, not the queue); tolerates topic-already-exists.
+- `POST /ingest` accepts a single event or a list, returns **202** with real
+  `accepted`/`queued` counts, or **503** while the producer is not connected.
+  `GET /health` reports `producer_connected`.
 
 Event envelope contract: `app/schemas.py` (canonical spec: docs/architecture.md#event-schema).
 
