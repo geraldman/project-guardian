@@ -22,12 +22,20 @@ manual does not restate it. The one-line version:
 
 ```
 mock-lti → capture-agent → Redpanda (guardian.telemetry.raw) → Vector → OpenSearch → Dashboards
+                                                                  │
+                       guardian.telemetry.normalized ←────────────┘
+                                     │
+                                   ARGUS → guardian.scores  → Vector → guardian-scores-*
+                                         → guardian.alerts ─┬→ Vector → guardian-alerts-*
+                                                            └→ alerting → Slack/Discord/log
 ```
 
 Component-level detail lives with each component: `services/mock-lti/README.md`,
-`services/capture/README.md`, `infra/vector/vector.yaml`,
-`infra/opensearch/index-template.json`, `infra/opensearch/ism-policy.json`,
-`infra/opensearch-init/init.sh`, `infra/dashboards/README.md`.
+`services/capture/README.md`, `services/argus/README.md`,
+`services/alerting/README.md`, `infra/vector/vector.yaml`,
+`infra/opensearch/*.json` (index templates, ISM policy, notification channel, monitor),
+`infra/opensearch-init/init.sh`, `infra/dashboards/README.md`,
+`training/seed_baseline.py`.
 
 ## 2. Configuration
 
@@ -42,6 +50,11 @@ compose up`.
 | `OPENSEARCH_ADMIN_PASSWORD` | `Guardian!Lti2026` | opensearch, opensearch-dashboards, vector, opensearch-init | The single admin credential for the storage layer. **Applied only on first start** — see below. |
 | `EVENTS_PER_SECOND` | `10` | mock-lti | Baseline synthetic-traffic generation rate. Also adjustable at runtime (see [3.1](#31-runtime-generator-control)). |
 | `ATTACK_MODE` | `mixed` | mock-lti | Attack injection: `off` \| `burst` \| `malformed` \| `mixed`. Also adjustable at runtime. |
+| `SLACK_WEBHOOK_URL` | *(empty)* | alerting | Slack incoming-webhook URL. Empty = log-only mode (alerts go to `docker compose logs alerting`). Never commit a real URL. |
+| `DISCORD_WEBHOOK_URL` | *(empty)* | alerting | Discord webhook URL; may be set together with Slack. |
+| `ALERT_DEDUP_SECONDS` | `300` | alerting | The dedup window per `(entity, alert type)`. |
+| `ARGUS_WARMUP_BUCKETS` | `15` | argus | Buckets of history an entity needs before it may alert (demo-compressed; production design is a 7-day window). |
+| `ARGUS_Z_THRESHOLD` | `3.0` | argus | Z-score threshold (σ) for the rate / payload / error-ratio detectors. |
 
 ### Fixed in the compose file
 
@@ -51,8 +64,10 @@ them means editing `infra/docker-compose.yml`:
 | Variable | Value | Consumed by | Effect |
 |---|---|---|---|
 | `CAPTURE_INGEST_URL` | `http://capture-agent:8001/ingest` | mock-lti | Where telemetry events are POSTed (asynchronously, out-of-band). |
-| `REDPANDA_BROKERS` | `redpanda:9092` | capture-agent | Kafka-API bootstrap address (internal listener). |
+| `REDPANDA_BROKERS` | `redpanda:9092` | capture-agent, argus, alerting | Kafka-API bootstrap address (internal listener). |
 | `TELEMETRY_TOPIC` | `guardian.telemetry.raw` | capture-agent | Topic the raw telemetry is produced to. |
+| `INPUT_TOPIC` / `SCORES_TOPIC` / `ALERTS_TOPIC` | `guardian.telemetry.normalized` / `guardian.scores` / `guardian.alerts` | argus (alerting consumes `ALERTS_TOPIC`) | The detection-layer topics (contract in architecture.md). |
+| `STATE_PATH` | `/data/argus_state.json` | argus | Baseline snapshot location on the `argus-data` volume. |
 
 mock-lti additionally has a service-level `EMIT_TIMEOUT_SECONDS` setting (default
 `2.0`, defined in `services/mock-lti/app/config.py`) bounding each fire-and-forget
@@ -87,21 +102,25 @@ curl -s -X POST http://localhost:8000/admin/generator/config \
 Runtime changes do not persist across a container restart — the service falls back to
 its environment defaults (`EVENTS_PER_SECOND`, `ATTACK_MODE`).
 
-<!-- TODO: verify at integration — the config endpoint contract is per
-services/mock-lti/README.md; confirm request field names, response shape, the status
-endpoint's counter fields, and the restart/persistence behavior once the generator
-lands on the mock-lti feature branch. -->
+Verified live: the config endpoint echoes the effective configuration
+(`{"events_per_second": 50.0, "attack_mode": "burst"}`); the status response carries
+`config`, `counters.events_emitted.{total,transaction,burst_spike,malformed_payload}`,
+`counters.attacks_injected.{burst,malformed}`, `counters.telemetry.{sent,failed}`, and
+`uptime_seconds`.
 
 ### 3.2 Inspecting the queue
 
 **Redpanda Console** (http://localhost:8080) is the quickest view:
 
-1. **Topics → `guardian.telemetry.raw`** — the Messages tab live-tails events (each
-   should be a schema-valid JSON telemetry envelope); the topic view shows the 3
-   partitions and produce throughput.
-2. **Consumer Groups → `guardian-vector`** — Vector's consumer group. Lag near zero
-   means Vector is keeping up; steadily growing lag means events are arriving faster
-   than they are being indexed (check Vector and OpenSearch).
+1. **Topics** — four of them since Week 2: `guardian.telemetry.raw` (envelopes from
+   capture-agent), `guardian.telemetry.normalized` (Vector's normalized fan-out),
+   `guardian.scores` (one document per finalized ARGUS bucket) and `guardian.alerts`
+   (anomalies only — usually quiet). The Messages tab live-tails each.
+2. **Consumer Groups** — `guardian-vector` (raw → OpenSearch), `guardian-argus`
+   (normalized → scoring), `guardian-vector-scores` / `guardian-vector-alerts`
+   (scores/alerts → OpenSearch), `guardian-alerting` (alerts → webhooks). Lag near
+   zero means the consumer is keeping up; steadily growing lag means events are
+   arriving faster than they are being processed.
 
 Command-line equivalents via `rpk` inside the Redpanda container:
 
@@ -117,6 +136,10 @@ docker compose exec redpanda rpk topic describe guardian.telemetry.raw
 
 # Vector's consumer group: members and lag
 docker compose exec redpanda rpk group describe guardian-vector
+
+# Detection layer: are scores/alerts flowing?
+docker compose exec redpanda rpk topic consume guardian.scores -n 2
+docker compose exec redpanda rpk group describe guardian-argus
 ```
 
 For host-side Kafka tooling (kcat, a local `rpk`, custom clients), the external
@@ -140,6 +163,10 @@ partitions. OpenSearch holds the durable data.
 - **1 shard / 0 replicas.** This is a single-node cluster: replicas could never be
   assigned and would only turn cluster health yellow. Demo-scale on purpose;
   production-scale retention sizing is out of scope for the MVP.
+- **Detection indices.** `guardian-scores-*` / `guardian-alerts-*` follow the same
+  daily naming (templates `guardian-scores-template` / `guardian-alerts-template`) but
+  are **not** under ISM: their volume is a tiny fraction of traffic's, and alert
+  history is exactly what a compliance reviewer wants kept.
 
 Useful checks:
 
@@ -169,9 +196,9 @@ docker compose ps
 ```
 
 Every long-running service has a healthcheck (Redpanda: `rpk cluster health`;
-OpenSearch: cluster status green/yellow; Dashboards: `/api/status` green; mock-lti and
-capture-agent: HTTP `/health`). `opensearch-init` is a one-shot job — `Exited (0)` is
-its healthy state.
+OpenSearch: cluster status green/yellow; Dashboards: `/api/status` green; mock-lti,
+capture-agent, argus and alerting: HTTP `/health`). `opensearch-init` is a one-shot
+job — `Exited (0)` is its healthy state.
 
 **Bootstrap job:**
 
@@ -179,10 +206,12 @@ its healthy state.
 docker compose logs opensearch-init
 ```
 
-Expect `[init] applying index template`, `[init] applying ISM policy` (a 409 on re-run
-means it already exists — fine), and a final `[init] done`. The line
-`no saved_objects.ndjson yet — skipping dashboards import` is normal until the
-dashboards bundle is committed to `infra/dashboards/`.
+Expect the three index templates, the ISM policy (409 on re-run = already exists,
+fine), the `guardian-alerting-webhook` notification channel, the
+`guardian-error-rate-spike` monitor, and one `imported <bundle>.ndjson` line per file
+in `infra/dashboards/`, then a final `[init] done`. Since Week 2 the init script
+checks every HTTP status — a rejected call aborts the job with the response body in
+the log, so a non-`Exited (0)` init container means exactly one thing to fix.
 
 **Vector (the usual first suspect when documents stop):**
 
@@ -208,9 +237,21 @@ docker compose exec redpanda rpk group describe guardian-vector
 
 # 4. Are documents landing in today's index?
 curl -sk -u 'admin:Guardian!Lti2026' 'https://localhost:9200/guardian-traffic-*/_count?pretty'
+
+# 5. Is ARGUS consuming and past warmup?
+curl -s http://localhost:8002/health
+curl -s http://localhost:8002/stats
+
+# 6. Are score documents landing?
+curl -sk -u 'admin:Guardian!Lti2026' 'https://localhost:9200/guardian-scores-*/_count?pretty'
+
+# 7. Is the alerting service receiving/sending?
+curl -s http://localhost:8003/stats
 ```
 
-The first hop that shows nothing is where to dig.
+The first hop that shows nothing is where to dig. For the detection layer
+specifically: `warming_up: true` in ARGUS's `/health` is not a fault — it means not
+enough baseline history yet (see the warmup notes in `services/argus/README.md`).
 
 ## 4. Reset and recovery
 
@@ -231,14 +272,16 @@ docker compose down -v
 docker compose up -d
 ```
 
-`down -v` removes the containers **and both named volumes**, which destroys:
+`down -v` removes the containers **and all three named volumes**, which destroys:
 
-- all `guardian-traffic-*` indices (every indexed event),
+- all `guardian-traffic-*` / `guardian-scores-*` / `guardian-alerts-*` indices,
 - all OpenSearch Dashboards state — index patterns, hand-built visualizations, and
-  anything else not committed to `infra/dashboards/saved_objects.ndjson`,
+  anything else not committed to `infra/dashboards/*.ndjson`,
 - the OpenSearch security config, including any password set at first start (the next
   start re-initializes from `OPENSEARCH_ADMIN_PASSWORD`),
-- all queued Redpanda messages and consumer-group offsets.
+- all queued Redpanda messages and consumer-group offsets,
+- ARGUS's learned baselines (`argus-data` volume) — **warmup starts over**; re-seed
+  with `python training/seed_baseline.py` or wait ~15 minutes of live traffic.
 
 Container images are kept, so the restart is fast. On the way back up,
 `opensearch-init` re-applies the index template and ISM policy automatically (and
@@ -268,8 +311,13 @@ docker compose logs opensearch-init
 | Vector logs show 401/auth or TLS errors against OpenSearch | Vector's `OPENSEARCH_ADMIN_PASSWORD` doesn't match the cluster's actual password | Align the value (see the password caveat in [section 2](#2-configuration)), then `docker compose up -d --force-recreate vector`. |
 | `docker compose up` fails with `port is already allocated` | Another process holds one of the host ports 8000, 8001, 5601, 8080, 9200, 19092, 9644 | Windows: `netstat -ano \| findstr :5601` then stop that process; Linux/macOS: `lsof -i :5601`. Retry `docker compose up -d`. |
 | Index template or ISM policy missing (`_index_template` / `_plugins/_ism` return 404) | `opensearch-init` failed or was interrupted | `docker compose logs opensearch-init`, fix the cause (usually OpenSearch not up or wrong password), re-run: `docker compose up opensearch-init`. |
-| `guardian.telemetry.raw` topic missing | capture-agent hasn't completed its topic bootstrap | `docker compose logs capture-agent`; verify Redpanda is healthy; restart capture-agent. <!-- TODO: verify at integration — topic bootstrap lands on the capture-agent feature branch. --> |
+| `guardian.telemetry.raw` topic missing | capture-agent hasn't completed its topic bootstrap | `docker compose logs capture-agent`; verify Redpanda is healthy; restart capture-agent. (Verified live: capture-agent creates it on first broker contact; argus bootstraps the other three topics the same way.) |
 | Events visible on the topic but indices stay empty | Vector down or mis-consuming | `docker compose logs -f vector`; `rpk group describe guardian-vector` (no members = Vector not connected; growing lag = Vector stuck). |
+| No documents in `guardian-scores-*` | ARGUS not consuming, or no finalized buckets yet | `curl http://localhost:8002/health` (consumer connected?) and `/stats` (`buckets_finalized` increasing?). Buckets finalize ~1 min behind event time; a silent stream also flushes after ~75 s. |
+| ARGUS healthy but no alerts ever | Warming up, or traffic genuinely benign | `/health` shows `warming_up` + `buckets_observed`/`warmup_buckets`. Fast-forward with `python training/seed_baseline.py`; confirm attacks are being injected (`ATTACK_MODE` ≠ `off`). |
+| Alerts in `guardian-alerts-*` but nothing in Slack | Log-only mode (no webhook configured) or delivery failing | `curl http://localhost:8003/health` shows `mode`; `/stats` shows `delivered` vs `delivery_failures`; `docker compose logs alerting` has the formatted alerts in log-only mode. |
+| One attack produced a flood of Slack messages | Dedup window misconfigured | Check `ALERT_DEDUP_SECONDS` (default 300). Distinct entities/types alert separately by design; per-bucket alert volume is additionally capped inside ARGUS. |
+| `guardian-error-rate-spike` monitor never fires | Threshold not reached (by design at default rates), or channel broken | Alerting → Monitors in Dashboards shows last run/result. Test the channel manually: `curl -X POST http://localhost:8003/notify -H 'Content-Type: application/json' -d '{"alert":{"type":"test","summary":"manual test"}}'`. |
 
 ## 6. End-to-end verification checklist
 
@@ -282,8 +330,7 @@ Execute top to bottom on a running stack; every step states its pass condition.
    with template and ISM lines above it.
 3. **Generator emitting.** Run
    `curl -s http://localhost:8000/admin/generator/status` twice, ~10 s apart — the
-   emitted-events counter increases between calls.
-   <!-- TODO: verify at integration — exact counter field names in the status response. -->
+   `counters.events_emitted.total` field increases between calls.
 4. **Events on the queue.**
    `docker compose exec redpanda rpk topic consume guardian.telemetry.raw -n 5`
    prints 5 JSON envelopes matching the schema in
@@ -317,3 +364,34 @@ Execute top to bottom on a running stack; every step states its pass condition.
 10. **Retention attached.**
     `curl -sk -u 'admin:Guardian!Lti2026' 'https://localhost:9200/_plugins/_ism/explain/guardian-traffic-*?pretty'`
     shows policy `guardian-traffic-ilm` on every `guardian-traffic-*` index.
+
+The Week-2 detection layer, continued from the same running stack:
+
+11. **ARGUS consuming and warm.** `curl -s http://localhost:8002/health` —
+    `consumer_connected: true`; `warming_up: false` (if `true`, either wait
+    ~15 minutes or run `python training/seed_baseline.py` and re-check after
+    ~2 minutes).
+12. **Scores flowing.**
+    `curl -sk -u 'admin:Guardian!Lti2026' 'https://localhost:9200/guardian-scores-*/_count?pretty'`
+    twice, ~90 s apart — count increases (ARGUS finalizes buckets ~1 minute behind
+    event time). `curl -s http://localhost:8002/stats` shows `buckets_finalized` and
+    `scores_emitted` increasing.
+13. **A burst is detected.** With `attack_mode` `burst` or `mixed`, wait for the next
+    injected burst (they fire every 60–120 s), then within ~2 minutes:
+    `curl -sk -u 'admin:Guardian!Lti2026' 'https://localhost:9200/guardian-alerts-*/_search?q=alert.source:argus&size=1&sort=@timestamp:desc&pretty'`
+    returns a `rate_spike` alert whose summary names the flooding entity.
+    <!-- TODO: screenshot after integration — Guardian Detection dashboard during a burst. -->
+14. **Dedup enforced.** `docker compose logs alerting` shows at most **one** delivered
+    alert per `(entity, alert type)` per 5-minute window; `curl -s
+    http://localhost:8003/stats` shows `suppressed` climbing while a burst repeats.
+15. **Benign traffic stays quiet.** Set the generator to `{"attack_mode": "off"}`,
+    wait ~10 minutes: `alerting` `/stats` `sent` stops increasing (scores keep
+    flowing; they just aren't anomalous). Restore `mixed` afterwards.
+16. **Monitor + channel installed.** Dashboards → Alerting → Monitors lists
+    `guardian-error-rate-spike` (enabled); its trigger action points at the
+    `guardian-alerting-webhook` channel. Manual channel test:
+    `curl -s -X POST http://localhost:8003/notify -H 'Content-Type: application/json' -d '{"alert":{"type":"test","summary":"manual test"}}'`
+    answers `{"accepted":true,...}` and the alert appears in the alerting log.
+17. **Guardian Detection dashboard populated.** Dashboards → Dashboard →
+    **Guardian Detection** (Global tenant): anomaly-score line moving, alert feed
+    showing recent summaries after step 13.
