@@ -16,7 +16,7 @@ Contracts (entity model, document schemas, thresholds): `docs/architecture.md#de
 | per-IP request rate | z-score vs the **cohort** of all per-IP counts | `rate_spike` |
 | mean payload size | EW z-score | `payload_anomaly` |
 | error ratio | EW z-score | `error_ratio_spike` |
-| bucket shape | Isolation Forest + k-NN distance ratio on recent bucket vectors | `multivariate_outlier` |
+| bucket shape (payers only) | Isolation Forest + k-NN distance ratio on recent per-payer bucket vectors | `multivariate_outlier` |
 
 Score-then-update: each bucket is judged against the baseline as it stood before it.
 The Isolation Forest / k-NN pair refits every ~15 buckets on a rolling reservoir in a
