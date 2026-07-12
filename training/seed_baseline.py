@@ -32,6 +32,36 @@ WALLET_USERS = [f"wallet-user-{i:04d}" for i in range(1, 501)]
 CHANNELS = ("ecommerce", "wallet", "bank")
 BASELINE_DECLINE_RATE = 0.03
 BATCH_SIZE = 200
+_DECLINE_REASONS = ("insufficient_funds", "risk_hold", "limit_exceeded", "issuer_declined")
+
+
+def benign_log_line(ip, payer, payee, channel, event_id, status, ts, latency_ms):
+    """Render a benign gateway log line.
+
+    NOTE: deliberately duplicates the benign families in
+    services/mock-lti/app/generator.py (benign_log_line). This script must run
+    on the host with stdlib Python only, so it can't import the container app;
+    keep the two in sync when either changes.
+    """
+    lat = f"{latency_ms:.0f}ms" if latency_ms else "0ms"
+    nbytes = random.randint(180, 900)
+    stamp = ts.strftime("%d/%b/%Y:%H:%M:%S +0000")
+
+    def line(method, path, code, msg):
+        return f'{ip} - {payer or "-"} [{stamp}] "{method} {path} HTTP/1.1" {code} {nbytes} {lat} "{msg}"'
+
+    if status == "declined":
+        return line("POST", "/api/v1/transactions/route", 402,
+                    f"payment declined: {random.choice(_DECLINE_REASONS)}")
+    family = random.choice(("route", "route", "balance", "status", "settlement"))
+    if family == "route":
+        return line("POST", "/api/v1/transactions/route", 200,
+                    f"routed {channel} payment {payer}->{payee}")
+    if family == "balance":
+        return line("GET", f"/api/v1/accounts/{payer}/balance", 200, "balance inquiry ok")
+    if family == "status":
+        return line("GET", f"/api/v1/transactions/{event_id[:8]}/status", 200, "status poll approved")
+    return line("POST", f"/api/v1/settlements/{channel}", 201, "settlement batch accepted")
 
 
 def benign_event(ts: datetime) -> dict:
@@ -43,8 +73,12 @@ def benign_event(ts: datetime) -> dict:
     else:
         payer, payee = random.choice(MERCHANTS), random.choice(BANKS)
     amount = round(min(max(random.lognormvariate(11.5, 1.0), 1_000.0), 50_000_000.0), -2)
+    event_id = str(uuid.uuid4())
+    status = "declined" if random.random() < BASELINE_DECLINE_RATE else "approved"
+    latency_ms = round(random.lognormvariate(2.5, 0.5), 1)
+    client_ip = f"10.{random.randint(0, 3)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
     return {
-        "event_id": str(uuid.uuid4()),
+        "event_id": event_id,
         "timestamp": ts.isoformat().replace("+00:00", "Z"),
         "source": "mock-lti",
         "event_type": "transaction",
@@ -53,12 +87,14 @@ def benign_event(ts: datetime) -> dict:
         "channel": channel,
         "amount": amount,
         "currency": "IDR",
-        "status": "declined" if random.random() < BASELINE_DECLINE_RATE else "approved",
-        "latency_ms": round(random.lognormvariate(2.5, 0.5), 1),
+        "status": status,
+        "latency_ms": latency_ms,
         "is_attack": False,
         "attack_pattern": None,
-        "client_ip": f"10.{random.randint(0, 3)}.{random.randint(0, 255)}.{random.randint(1, 254)}",
+        "client_ip": client_ip,
         "raw_payload_valid": True,
+        "log_message": benign_log_line(client_ip, payer, payee, channel, event_id,
+                                       status, ts, latency_ms),
     }
 
 
