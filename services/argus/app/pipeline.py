@@ -1,10 +1,14 @@
 """Bucket aggregation + scoring — the heart of ARGUS.
 
 Events are folded into 1-minute tumbling buckets keyed by *event* time, per
-entity (global / payer / client_ip). A bucket for minute M finalizes when the
-watermark (newest minute seen) passes M — so a fast replay of backdated seed
-traffic builds and closes historical buckets exactly like live traffic — with
-a wall-clock flusher as the safety net for stalled streams.
+entity (global / payer / client_ip). Watermarks are tracked **per partition**
+and a bucket for minute M finalizes only when the slowest partition's
+watermark passes M: the producer round-robins events across partitions, so
+during a fast backdated replay the consumer sees whole minutes "from the
+past" of whichever partition it fetches next — a single global watermark
+would finalize those buckets as fragments (observed live: 1.7 events/bucket
+instead of ~600). A wall-clock flusher remains the safety net for stalled
+streams and idle partitions.
 
 Scoring is score-then-update: a bucket is judged against the baseline as it
 was *before* that bucket, then folded in. client_ip baselines are cohort-wide
@@ -74,7 +78,8 @@ class Pipeline:
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
         self._buckets: dict[int, _Bucket] = {}
-        self._watermark = 0
+        self._watermarks: dict[int, int] = {}  # partition -> newest minute seen
+        self._finalized_watermark = 0  # newest finalized minute; older events are late
         # entity baselines: "global" / "payer:<id>" keyed dicts of EWStats per feature
         self.entities: dict[str, dict[str, EWStats]] = {}
         self.ip_cohort = EWStats(cfg.ew_halflife_buckets)
@@ -84,6 +89,7 @@ class Pipeline:
         self.counters = {
             "events_consumed": 0,
             "events_dropped": 0,
+            "events_late": 0,
             "buckets_finalized": 0,
             "scores_emitted": 0,
             "alerts_emitted": 0,
@@ -91,7 +97,16 @@ class Pipeline:
 
     # -- ingest --------------------------------------------------------------
 
-    def add_event(self, doc: dict, payload_bytes: int) -> list[int]:
+    def register_partitions(self, partitions: list[int]) -> None:
+        """Must be called with the full assignment before consuming: a bucket
+        may only finalize once EVERY partition's watermark passed it. Without
+        pre-registration, a partition whose backlog hasn't been fetched yet is
+        invisible to min(), its minutes finalize early, and its entire replay
+        arrives 'late' as one-event fragment buckets (observed live)."""
+        for p in partitions:
+            self._watermarks.setdefault(p, 0)
+
+    def add_event(self, doc: dict, payload_bytes: int, partition: int) -> list[int]:
         """Fold one normalized event in; returns minutes ready to finalize."""
         try:
             ts = datetime.fromisoformat(str(doc["@timestamp"]).replace("Z", "+00:00")).timestamp()
@@ -107,8 +122,13 @@ class Pipeline:
             self.counters["events_dropped"] += 1
             return []
 
-        self.counters["events_consumed"] += 1
         minute = int(ts // self.cfg.bucket_seconds) * self.cfg.bucket_seconds
+        if minute <= self._finalized_watermark:
+            # Its bucket is already scored and gone; recreating it would spawn
+            # a fragment bucket and poison the baseline. Count and move on.
+            self.counters["events_late"] += 1
+            return []
+        self.counters["events_consumed"] += 1
         bucket = self._buckets.get(minute)
         if bucket is None:
             bucket = self._buckets[minute] = _Bucket(minute)
@@ -120,9 +140,10 @@ class Pipeline:
         if ip:
             bucket.ips.setdefault(ip, _Agg()).add(payload_bytes, amount, error, malformed)
 
-        if minute > self._watermark:
-            self._watermark = minute
-        return [m for m in self._buckets if m < self._watermark]
+        if minute > self._watermarks.get(partition, 0):
+            self._watermarks[partition] = minute
+        low_watermark = min(self._watermarks.values())
+        return [m for m in self._buckets if m < low_watermark]
 
     def stale_minutes(self) -> list[int]:
         """Wall-clock flush: window long over AND no recent appends (the idle
@@ -154,6 +175,7 @@ class Pipeline:
         bucket = self._buckets.pop(minute, None)
         if bucket is None:
             return [], []
+        self._finalized_watermark = max(self._finalized_watermark, minute)
         cfg = self.cfg
         window = {
             "start": _iso(minute),
@@ -258,7 +280,9 @@ class Pipeline:
                         },
                     }
                 )
-            if anomalous and alert_type and (etype == "global" or agg.count >= cfg.min_alert_events):
+            # min_alert_events applies to global too: a fragment/stall-flushed
+            # global bucket with 3 events and 1 error is a 33% "error spike".
+            if anomalous and alert_type and agg.count >= cfg.min_alert_events:
                 candidates.append(
                     self._alert(end_iso, alert_type, etype, eid, score, summary, window,
                                 {"rate_z": round(rate_z, 1), "payload_z": round(payload_z, 1),
