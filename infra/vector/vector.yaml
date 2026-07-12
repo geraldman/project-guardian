@@ -20,6 +20,24 @@ sources:
     # instead (parse_json), which also lets us log-and-drop junk payloads in
     # one place without wedging the pipeline.
 
+  # Detection-layer topics (Week 2): ARGUS emits index-shaped documents; Vector
+  # is the single OpenSearch write path, so it carries them into their indices.
+  # Distinct group ids — mixing subscriptions inside one consumer group breaks
+  # rebalancing.
+  scores_raw:
+    type: kafka
+    bootstrap_servers: redpanda:9092
+    group_id: guardian-vector-scores
+    topics:
+      - guardian.scores
+
+  alerts_raw:
+    type: kafka
+    bootstrap_servers: redpanda:9092
+    group_id: guardian-vector-alerts
+    topics:
+      - guardian.alerts
+
 transforms:
   normalize:
     type: remap
@@ -73,6 +91,47 @@ transforms:
 
       . = out
 
+  # Scores/alerts arrive already index-shaped (contract:
+  # docs/architecture.md#detection-layer) — parse, re-type @timestamp so the
+  # sinks' strftime index rendering keys off event time, drop junk.
+  scores_parse:
+    type: remap
+    inputs: [scores_raw]
+    drop_on_error: true
+    drop_on_abort: true
+    source: |
+      parsed, err = parse_json(string!(.message))
+      if err != null {
+        log("scores_parse: dropping undecodable payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+      doc, err = object(parsed)
+      if err != null {
+        log("scores_parse: dropping non-object JSON payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+      . = doc
+      ."@timestamp" = parse_timestamp(string(doc."@timestamp") ?? "", "%+") ?? now()
+
+  alerts_parse:
+    type: remap
+    inputs: [alerts_raw]
+    drop_on_error: true
+    drop_on_abort: true
+    source: |
+      parsed, err = parse_json(string!(.message))
+      if err != null {
+        log("alerts_parse: dropping undecodable payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+      doc, err = object(parsed)
+      if err != null {
+        log("alerts_parse: dropping non-object JSON payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+      . = doc
+      ."@timestamp" = parse_timestamp(string(doc."@timestamp") ?? "", "%+") ?? now()
+
 sinks:
   opensearch_out:
     type: elasticsearch
@@ -90,5 +149,52 @@ sinks:
       verify_certificate: false
       verify_hostname: false
     # OpenSearch reports a non-ES version string; skip the ES healthcheck handshake
+    healthcheck:
+      enabled: false
+
+  # Fan-out for the detection layer: normalized events also go back onto the
+  # queue so scorer services (ARGUS, later SENTINEL/CASSANDRA) consume the same
+  # normalized shape that lands in OpenSearch — one normalization, many readers.
+  normalized_out:
+    type: kafka
+    inputs: [normalize]
+    bootstrap_servers: redpanda:9092
+    topic: guardian.telemetry.normalized
+    encoding:
+      codec: json
+
+  scores_out:
+    type: elasticsearch
+    inputs: [scores_parse]
+    endpoints: ["https://opensearch:9200"]
+    mode: bulk
+    api_version: v7
+    bulk:
+      index: "guardian-scores-%Y.%m.%d"
+    auth:
+      strategy: basic
+      user: admin
+      password: "${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}"
+    tls:
+      verify_certificate: false
+      verify_hostname: false
+    healthcheck:
+      enabled: false
+
+  alerts_out:
+    type: elasticsearch
+    inputs: [alerts_parse]
+    endpoints: ["https://opensearch:9200"]
+    mode: bulk
+    api_version: v7
+    bulk:
+      index: "guardian-alerts-%Y.%m.%d"
+    auth:
+      strategy: basic
+      user: admin
+      password: "${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}"
+    tls:
+      verify_certificate: false
+      verify_hostname: false
     healthcheck:
       enabled: false

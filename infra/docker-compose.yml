@@ -13,6 +13,7 @@ networks:
 volumes:
   redpanda-data:
   opensearch-data:
+  argus-data:
 
 services:
   # ── Queue ────────────────────────────────────────────────────────────────
@@ -164,6 +165,57 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Detection / alerting (Week 2) ────────────────────────────────────────
+  argus:
+    build: ../services/argus
+    ports:
+      - "8002:8002"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      INPUT_TOPIC: guardian.telemetry.normalized
+      SCORES_TOPIC: guardian.scores
+      ALERTS_TOPIC: guardian.alerts
+      # Demo-scale warmup; the production design is a 7-day window
+      # (docs/architecture.md#detection-layer).
+      WARMUP_BUCKETS: ${ARGUS_WARMUP_BUCKETS:-15}
+      Z_THRESHOLD: ${ARGUS_Z_THRESHOLD:-3.0}
+      STATE_PATH: /data/argus_state.json
+    volumes:
+      - argus-data:/data
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  alerting:
+    build: ../services/alerting
+    ports:
+      - "8003:8003"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      ALERTS_TOPIC: guardian.alerts
+      # Leave webhook URLs unset for log-only mode (alerts land in
+      # `docker compose logs alerting` instead of Slack/Discord).
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DEDUP_SECONDS: ${ALERT_DEDUP_SECONDS:-300}
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
       interval: 10s
       timeout: 5s
       retries: 5

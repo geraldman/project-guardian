@@ -1,0 +1,48 @@
+{
+  "type": "monitor",
+  "name": "guardian-error-rate-spike",
+  "monitor_type": "query_level_monitor",
+  "enabled": true,
+  "schedule": { "period": { "interval": 1, "unit": "MINUTES" } },
+  "inputs": [
+    {
+      "search": {
+        "indices": ["guardian-traffic-*"],
+        "query": {
+          "size": 0,
+          "query": {
+            "bool": {
+              "filter": [
+                { "term": { "error": true } },
+                { "range": { "@timestamp": { "gte": "now-5m" } } }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "triggers": [
+    {
+      "name": "error-rate-above-threshold",
+      "severity": "2",
+      "condition": {
+        "script": {
+          "source": "ctx.results[0].hits.total.value > 200",
+          "lang": "painless"
+        }
+      },
+      "actions": [
+        {
+          "name": "notify-guardian-alerting",
+          "destination_id": "guardian-alerting-webhook",
+          "message_template": {
+            "source": "{\"alert\":{\"type\":\"error_rate_spike\",\"severity\":\"medium\",\"entity_type\":\"global\",\"entity_id\":\"global\",\"score\":null,\"source\":\"opensearch-monitor\",\"summary\":\"OpenSearch monitor: {{ctx.results.0.hits.total.value}} error events in guardian-traffic-* over the last 5 minutes (threshold 200).\"}}",
+            "lang": "mustache"
+          },
+          "throttle_enabled": false
+        }
+      ]
+    }
+  ]
+}
