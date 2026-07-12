@@ -21,6 +21,7 @@ class TelemetryEvent(BaseModel):
     status: str                        # approved | declined | error | malformed
     latency_ms: float | None = None
     is_attack: bool = False
-    attack_pattern: str | None = None  # burst | malformed | None
+    attack_pattern: str | None = None  # burst | malformed | slow_exfil | log_attack | None
     client_ip: str | None = None       # synthetic
     raw_payload_valid: bool = True
+    log_message: str | None = None     # rendered API-gateway log line (Vector -> log.message)

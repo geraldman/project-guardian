@@ -81,6 +81,13 @@ transforms:
         "is_malformed":   !(bool(ev.raw_payload_valid) ?? true)
       }
 
+      # Application/gateway log line (Week 3: SENTINEL template mining). Optional
+      # on the envelope — old queued events won't carry it, so only attach when
+      # present to avoid an empty log object on legacy records.
+      if ev.log_message != null {
+        out.log = { "message": ev.log_message }
+      }
+
       status = string(ev.status) ?? "unknown"
       out.error = includes(["declined", "error", "malformed"], status)
 
