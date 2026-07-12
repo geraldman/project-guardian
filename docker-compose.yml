@@ -1,4 +1,8 @@
 # Thin root compose so `docker compose up` works from the repo root.
 # The canonical stack definition lives in infra/docker-compose.yml.
+# Project name must be set here: with `include`, Compose ignores the
+# `name:` field of included files and defaults to the directory name.
+name: guardian
+
 include:
   - path: infra/docker-compose.yml
