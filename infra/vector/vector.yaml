@@ -1,6 +1,11 @@
 # Vector pipeline: Redpanda topic → normalize (VRL) → OpenSearch.
 # Owned by feat/infra-pipeline. Field mapping contract: docs/architecture.md#normalized-fields
-# This is a working skeleton — refine VRL with `vector vrl` REPL as needed.
+
+# The elasticsearch sink's strftime index template renders against the event's
+# timestamp field named here — pointing it at "@timestamp" makes the daily
+# guardian-traffic-%Y.%m.%d indices key off *event* time, not ingest time.
+log_schema:
+  timestamp_key: "@timestamp"
 
 sources:
   telemetry_raw:
@@ -9,15 +14,31 @@ sources:
     group_id: guardian-vector
     topics:
       - guardian.telemetry.raw
-    decoding:
-      codec: json
+    # Deliberately NO `decoding.codec: json` here: the kafka source overwrites
+    # the decoded envelope's `timestamp` field with the Kafka message timestamp,
+    # destroying the event time. Decoding happens in the normalize transform
+    # instead (parse_json), which also lets us log-and-drop junk payloads in
+    # one place without wedging the pipeline.
 
 transforms:
   normalize:
     type: remap
     inputs: [telemetry_raw]
+    # Never forward a raw/unnormalized event on VRL failure; log and drop.
+    drop_on_error: true
+    drop_on_abort: true
     source: |
-      ev = object!(.)
+      parsed, err = parse_json(string!(.message))
+      if err != null {
+        log("normalize: dropping undecodable payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+      ev, err = object(parsed)
+      if err != null {
+        log("normalize: dropping non-object JSON payload: " + err, level: "warn", rate_limit_secs: 10)
+        abort
+      }
+
       out = {}
 
       out."@timestamp" = parse_timestamp(string(ev.timestamp) ?? "", "%+") ?? now()
