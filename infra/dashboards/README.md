@@ -1,12 +1,18 @@
 # Dashboards saved objects
 
-`saved_objects.ndjson` (not yet committed) is the exported OpenSearch Dashboards bundle:
-index pattern `guardian-traffic-*`, the traffic-volume / error-rate / channel-breakdown
-visualizations, and the combined **Guardian Traffic Overview** dashboard.
+`opensearch-init` auto-imports **every** `*.ndjson` in this folder on `docker compose
+up` (Global tenant), which is what makes the dashboards reproducible from a clean
+checkout.
 
-Workflow (`feat/dashboards`, after the pipeline is integrated and data is flowing):
+- `saved_objects.ndjson` — Week 1 bundle, exported from a live Dashboards session:
+  index pattern `guardian-traffic-*`, the traffic-volume / error-rate /
+  channel-breakdown / attack-pattern / counter visualizations, and the
+  **Guardian Traffic Overview** dashboard.
+- `detection_objects.ndjson` — Week 2 bundle, generated (not UI-exported): index
+  patterns `guardian-scores-*` / `guardian-alerts-*`, ARGUS anomaly-score line
+  (0.5 threshold marker), alerts-over-time-by-severity, alerts-by-type donut, alert
+  feed table, and the **Guardian Detection** dashboard.
 
-1. Build the visualizations by hand in the Dashboards UI (http://localhost:5601).
-2. Stack Management → Saved objects → Export → save as `saved_objects.ndjson` here.
-3. Commit it. `opensearch-init` auto-imports it on every `docker compose up`, which is
-   what makes the dashboard reproducible from a clean checkout.
+To change a dashboard: edit it in the UI (http://localhost:5601), then Stack
+Management → Saved objects → Export the affected objects and overwrite the bundle here
+— committed ndjson is the source of truth, a UI-only change dies with `down -v`.
