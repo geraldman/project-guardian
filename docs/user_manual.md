@@ -16,10 +16,17 @@ network. Every event flows through the full pipeline:
 ```
 mock-lti  →  capture-agent  →  Redpanda  →  Vector  →  OpenSearch  →  OpenSearch Dashboards
 (traffic)    (ingestion)       (queue)      (normalize)  (storage)     (analysis UI)
+                                                │
+                                                └→  ARGUS  →  alerting  →  Slack/Discord
+                                                    (anomaly     (5-min dedup
+                                                     scoring)     webhooks)
 ```
 
-Because the traffic source is bundled, a single `docker compose up` demonstrates the
-entire system with no external infrastructure and no real data.
+Since Week 2 the pipeline also *detects*: **ARGUS** scores every minute of traffic
+against learned baselines, and the **alerting** service turns anomalies into
+deduplicated Slack/Discord notifications (or log entries when no webhook is
+configured). Because the traffic source is bundled, a single `docker compose up`
+demonstrates the entire system with no external infrastructure and no real data.
 
 ## 2. Prerequisites
 
@@ -86,6 +93,8 @@ normal.
 | Redpanda Console | http://localhost:8080 | Watch the raw telemetry queue (topic `guardian.telemetry.raw`) |
 | mock-lti API | http://localhost:8000 | Synthetic traffic generator — interactive API docs at http://localhost:8000/docs |
 | capture-agent API | http://localhost:8001 | Ingestion boundary — interactive API docs at http://localhost:8001/docs |
+| ARGUS API | http://localhost:8002 | Anomaly scorer — health, stats, and baseline inspection (http://localhost:8002/docs) |
+| alerting API | http://localhost:8003 | Alert dedup + webhook delivery — health and stats (http://localhost:8003/docs) |
 
 **Dashboards login:** username `admin`, password is the value of
 `OPENSEARCH_ADMIN_PASSWORD` (default `Guardian!Lti2026` if you did not override it).
@@ -100,27 +109,37 @@ Events are indexed into **daily indices** named `guardian-traffic-YYYY.MM.DD` (r
 for 7 days — see the [Admin Manual](admin_manual.md#33-index-lifecycle)). To browse
 them, open Dashboards → **Discover**.
 
-Discover needs an index pattern. The `guardian-traffic-*` pattern ships in the saved
-dashboards bundle and is imported automatically at startup; if it is not present yet
-(the bundle is committed after pipeline integration), create it once by hand:
-
-1. Dashboards menu → **Dashboards Management** → **Index patterns** → **Create index pattern**.
-2. Pattern: `guardian-traffic-*`
-3. Time field: `@timestamp`
-<!-- TODO: verify at integration — remove the manual index-pattern steps once
-saved_objects.ndjson is committed and auto-imported by opensearch-init. -->
+Discover needs an index pattern. All three patterns (`guardian-traffic-*`,
+`guardian-scores-*`, `guardian-alerts-*`) ship in the committed saved-objects bundles
+and are imported automatically at startup into the **Global** tenant — no manual setup.
+If one is missing, check the bootstrap job: `docker compose logs opensearch-init`.
 
 With the time range set to "Last 15 minutes" you should see a steady stream of
 documents (the generator's default rate is 10 events/second).
 
 ### The Guardian Traffic Overview dashboard
 
-The **Guardian Traffic Overview** dashboard is the single pane of glass: traffic volume
-over time, error rate, and channel breakdown.
+The **Guardian Traffic Overview** dashboard is the single pane of glass for raw
+traffic: volume by event type, error rate over time, channel breakdown, attack
+patterns, and event counters.
 
-<!-- TODO: screenshot after integration — dashboard is built in the Dashboards UI once
-data is flowing, then exported to infra/dashboards/saved_objects.ndjson and
-auto-imported on startup. Add the walkthrough + screenshots then. -->
+<!-- TODO: screenshot — add during the Week 5 evidence pass. -->
+
+### The Guardian Detection dashboard
+
+The **Guardian Detection** dashboard shows what ARGUS makes of that traffic:
+
+- **ARGUS anomaly score over time** — the max anomaly score per entity type, with the
+  0.5 alert-ish threshold marked. Benign traffic hugs zero; injected bursts spike it.
+- **Alerts over time by severity** and **Alerts by type** — what fired, when.
+- **Alert feed** — the most recent alert summaries in plain English, e.g.
+  *"Request rate for client_ip 10.2.14.9 is 14.1x the cohort baseline."*
+
+Empty at first? ARGUS deliberately stays quiet during its **warmup** (~15 minutes of
+traffic history) so it never alerts off a baseline it doesn't have yet. Wait it out, or
+fast-forward with the seeding script (see [section 6](#6-trying-it-out)).
+
+<!-- TODO: screenshot — add during the Week 5 evidence pass. -->
 
 ### How traffic types appear
 
@@ -164,11 +183,16 @@ curl -s -X POST http://localhost:8000/transactions/route \
 ```
 
 Telemetry for the request is emitted asynchronously (out-of-band), so the response
-returns without waiting on the pipeline.
+returns without waiting on the pipeline. A real response (verified live):
 
-<!-- TODO: verify at integration — POST /transactions/route lands on the mock-lti
-feature branch; confirm the exact request body and response shape against
-services/mock-lti once merged, and paste a real response example here. -->
+```json
+{
+  "transaction_id": "51bb95de-1672-4ab7-bfaa-52b0127e1bd7",
+  "status": "approved",
+  "latency_ms": 12.1,
+  "timestamp": "2026-07-12T10:14:16.192313Z"
+}
+```
 
 ### Change the traffic rate or attack mode at runtime
 
@@ -184,21 +208,58 @@ curl -s -X POST http://localhost:8000/admin/generator/config \
   -d '{"events_per_second": 50, "attack_mode": "burst"}'
 ```
 
-Valid `attack_mode` values: `off`, `burst`, `malformed`, `mixed` (default).
-
-<!-- TODO: verify at integration — the config endpoint contract is per
-services/mock-lti/README.md; confirm the request body field names, response shape, and
-the status endpoint's counter fields once the generator lands. -->
+Valid `attack_mode` values: `off`, `burst`, `malformed`, `mixed` (default). The config
+endpoint echoes the effective configuration back
+(`{"events_per_second": 50.0, "attack_mode": "burst"}`); the status endpoint returns
+the config plus counters under `counters.events_emitted`
+(`total` / `transaction` / `burst_spike` / `malformed_payload`),
+`counters.attacks_injected` (`burst` / `malformed`) and `counters.telemetry`
+(`sent` / `failed`), with `uptime_seconds`.
 
 After changing the config, watch the effect live: message throughput rises in Redpanda
 Console (http://localhost:8080, topic `guardian.telemetry.raw`), and the traffic-volume
 chart in Dashboards shows the burst within the flush interval.
 
+### Watch a detection fire
+
+The end-to-end detection demo, once ARGUS is past warmup:
+
+```sh
+# 1. Make sure bursts are being injected (they are by default in mixed mode)
+curl -s http://localhost:8000/admin/generator/status
+
+# 2. Watch the alerting service's inbox (log-only mode is the default)
+docker compose logs -f alerting
+```
+
+Within a minute or two of the next injected burst you'll see a formatted alert in the
+alerting log — and only **one** per attack pattern per 5-minute window, however long
+the burst lasts (that's the dedup working; the suppressed count surfaces on the next
+alert). The same alerts land in the **Guardian Detection** dashboard's alert feed, and
+`guardian-scores-*` shows the anomaly score spike.
+
+To deliver to Slack or Discord instead of the log, set `SLACK_WEBHOOK_URL` and/or
+`DISCORD_WEBHOOK_URL` in `.env` and `docker compose up -d alerting` — see the
+[Admin Manual](admin_manual.md#2-configuration).
+
+### Skip the warmup (fresh stack)
+
+On a brand-new stack ARGUS needs ~15 minutes of traffic history before it may alert.
+To fast-forward, replay backdated benign traffic through the real pipeline (host
+Python 3.10+, no extra packages):
+
+```sh
+python training/seed_baseline.py
+```
+
+Detection is then live within a couple of minutes.
+
 ## 7. Stopping and resetting
 
 ```sh
 docker compose down        # stop everything, keep indexed data and queue
-docker compose down -v     # stop AND wipe all data (indices, dashboards state, queue)
+docker compose down -v     # stop AND wipe all data (indices, dashboards state, queue,
+                           # and ARGUS's learned baselines — warmup starts over)
 docker compose up -d       # start again
 ```
 
