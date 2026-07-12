@@ -22,6 +22,7 @@ from .generator import (
     ATTACK_MODES,
     BASELINE_DECLINE_RATE,
     TrafficGenerator,
+    benign_log_line,
     random_client_ip,
     random_latency_ms,
 )
@@ -32,7 +33,15 @@ from .telemetry import TelemetryEmitter
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     emitter = TelemetryEmitter(settings.capture_ingest_url, settings.emit_timeout_seconds)
-    generator = TrafficGenerator(emitter, settings.events_per_second, settings.attack_mode)
+    generator = TrafficGenerator(
+        emitter,
+        settings.events_per_second,
+        settings.attack_mode,
+        exfil_payer_id=settings.exfil_payer_id,
+        exfil_events_per_minute=settings.exfil_events_per_minute,
+        exfil_amount_multiplier=settings.exfil_amount_multiplier,
+        log_attack_probability=settings.log_attack_probability,
+    )
     app.state.emitter = emitter
     app.state.generator = generator
     generator.start()
@@ -84,6 +93,7 @@ def route_transaction(
         latency_ms=random_latency_ms(),
         client_ip=random_client_ip(),
     )
+    event.log_message = benign_log_line(event)
     # Runs after the response is sent -- telemetry adds zero response latency.
     background_tasks.add_task(request.app.state.emitter.send, event)
     return RouteResponse(
