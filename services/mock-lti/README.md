@@ -6,14 +6,16 @@ and emits every event as telemetry — asynchronously, out-of-band — to `captu
 
 Branch: **feat/mock-lti** owns `services/mock-lti/**`.
 
-To build here (Phase 0 has only `/health` + status stub):
+Components:
 - `app/generator.py` — background traffic loop (asyncio task started in FastAPI lifespan),
   paced by `EVENTS_PER_SECOND`; attack injection per `ATTACK_MODE` (off|burst|malformed|mixed)
 - `app/telemetry.py` — fire-and-forget async POST to `CAPTURE_INGEST_URL` (short timeout,
-  try/except so a capture hiccup never stalls generation)
+  try/except so a capture hiccup never stalls generation; failures are counted)
 - `POST /transactions/route` — demo-curlable endpoint; telemetry via `BackgroundTasks`
   (the §5.1.2 async/non-blocking proof point)
 - `POST /admin/generator/config` — runtime toggle for rate + attack mode
+- `GET /admin/generator/status` — config, counters (events by type, attacks, telemetry
+  sent/failed), uptime
 
 Event envelope contract: `app/schemas.py` (canonical spec: docs/architecture.md#event-schema).
 
