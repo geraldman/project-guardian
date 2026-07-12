@@ -232,10 +232,16 @@ class Pipeline:
                         f"vs baseline {stats[ERROR].mean:.0%} (z={error_z:.1f})."
                     )
 
-            vec = bucket_vector(
-                agg.count, feats["mean_payload_bytes"], feats["error_ratio"], agg.malformed_count
-            )
-            mv_score, iso_df, knn_ratio = self.detector.score(vec)
+            # Multivariate is payer-only: the reservoir is a dense cloud of
+            # small per-payer vectors, so the one ~600-event global vector is
+            # ALWAYS "far from everything" (knn_ratio ~34 observed on benign
+            # steady state). Global has its own personal-baseline z-detectors.
+            mv_score, iso_df, knn_ratio = 0.0, 0.0, 0.0
+            if etype != "global":
+                vec = bucket_vector(
+                    agg.count, feats["mean_payload_bytes"], feats["error_ratio"], agg.malformed_count
+                )
+                mv_score, iso_df, knn_ratio = self.detector.score(vec)
             if mv_score >= cfg.multivariate_threshold:
                 reasons.append(f"multivariate={mv_score:.2f} (iforest_df={iso_df:.3f}, knn_ratio={knn_ratio:.1f})")
                 components.append(mv_score)
@@ -245,7 +251,8 @@ class Pipeline:
                         f"Traffic shape for {etype} {eid} is a multivariate outlier "
                         f"(Isolation Forest df={iso_df:.3f}, k-NN distance ratio {knn_ratio:.1f})."
                     )
-            self.detector.observe(vec)
+            if etype != "global":
+                self.detector.observe(vec)
 
             score = round(max(components, default=0.0), 4)
             anomalous = bool(components) and not warming
