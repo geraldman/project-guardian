@@ -54,15 +54,17 @@ else
 fi
 
 # Monitor: the Alerting plugin assigns random ids, so idempotency is by name.
+# Look for the name in the hits — on a virgin cluster the search 404s
+# (.opendistro-alerting-config doesn't exist yet), which also means "create it".
 if curl -sk -u "$AUTH" -X POST "$OS_URL/_plugins/_alerting/monitors/_search" \
      -H 'Content-Type: application/json' \
      -d '{"query":{"term":{"monitor.name.keyword":"guardian-error-rate-spike"}}}' \
-     | grep -q '"value":0'; then
+     | grep -q '"name":"guardian-error-rate-spike"'; then
+  echo "[init] monitor guardian-error-rate-spike already exists"
+else
   echo "[init] creating monitor guardian-error-rate-spike"
   req - POST "$OS_URL/_plugins/_alerting/monitors" \
     -H 'Content-Type: application/json' -d @/init/opensearch/monitor-error-rate.json
-else
-  echo "[init] monitor guardian-error-rate-spike already exists"
 fi
 
 # Saved-objects bundles are exported from live Dashboards sessions and

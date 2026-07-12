@@ -75,8 +75,19 @@ class ArgusKafka:
                 backoff = min(backoff * 2, _BACKOFF_MAX_S)
                 continue
             self._producer, self._consumer = producer, consumer
+            # The full assignment must be registered before the first message
+            # (see Pipeline.register_partitions); the join usually completes
+            # inside consumer.start(), the loop covers a slow rebalance.
+            for _ in range(100):
+                if consumer.assignment():
+                    break
+                await asyncio.sleep(0.1)
+            self._pipeline.register_partitions(
+                [tp.partition for tp in consumer.assignment()]
+            )
             self.connected = True
-            log.info("connected; consuming %s", self.input_topic)
+            log.info("connected; consuming %s (partitions %s)", self.input_topic,
+                     sorted(tp.partition for tp in consumer.assignment()))
             try:
                 await self._consume_loop(consumer)
             except asyncio.CancelledError:
@@ -94,7 +105,7 @@ class ArgusKafka:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._pipeline.counters["events_dropped"] += 1
                 continue
-            ready = self._pipeline.add_event(doc, len(msg.value))
+            ready = self._pipeline.add_event(doc, len(msg.value), msg.partition)
             for minute in sorted(ready):
                 await self.finalize_and_emit(minute)
 
