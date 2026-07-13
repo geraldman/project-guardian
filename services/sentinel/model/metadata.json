@@ -1,0 +1,29 @@
+{
+  "model": "sentinel",
+  "classes": [
+    "benign",
+    "suspicious",
+    "malicious"
+  ],
+  "feature_names": [
+    "window_events",
+    "distinct_templates",
+    "n_sqli",
+    "n_traversal",
+    "n_auth_fail",
+    "n_scanner",
+    "n_schema_reject",
+    "n_other",
+    "n_suspicious_other",
+    "benign_ratio",
+    "auth_fail_ratio",
+    "err_4xx_ratio",
+    "max_auth_attempt"
+  ],
+  "seed": 1337,
+  "windows": 9000,
+  "num_boost_round": 40,
+  "max_depth": 3,
+  "holdout_accuracy": 1.0,
+  "xgboost_version": "3.3.0"
+}
