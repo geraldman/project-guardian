@@ -103,9 +103,11 @@ Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
 
 ## Where to see results
 
-- **OpenSearch Dashboards** (http://localhost:5601) — the **Guardian Traffic Overview** dashboard
-  for raw traffic, and **Guardian Detection** for anomaly scores and the live alert feed. Both are
-  imported automatically at startup into the **Global** tenant.
+- **OpenSearch Dashboards** (http://localhost:5601) — three dashboards, all imported
+  automatically at startup into the **Global** tenant: **Guardian Traffic Overview** (raw traffic),
+  **Guardian Detection** (anomaly scores + live alert feed), and **Guardian Threat Fusion** (the
+  fused threat level, per-model contributions, SENTINEL and CASSANDRA panels, and the corroborated
+  entities that two detectors agree on).
 - **`GET :8006/threat`** — the fastest read on "is anything happening right now". A real response
   during an attack (verified live):
 

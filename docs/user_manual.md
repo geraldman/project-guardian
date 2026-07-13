@@ -177,7 +177,7 @@ Real responses on a warm stack (verified live):
 
 | Service | URL | What it's for |
 |---|---|---|
-| OpenSearch Dashboards | http://localhost:5601 | The SIEM view: Discover, the Guardian Traffic Overview and Guardian Detection dashboards |
+| OpenSearch Dashboards | http://localhost:5601 | The SIEM view: Discover and the Guardian Traffic Overview / Guardian Detection / Guardian Threat Fusion dashboards |
 | Redpanda Console | http://localhost:8080 | Watch the queue (topics `guardian.telemetry.raw`, `.normalized`, `guardian.scores`, `guardian.alerts`) |
 | mock-lti API | http://localhost:8000 | Synthetic traffic + attack generator — interactive API docs at `/docs` |
 | capture-agent API | http://localhost:8001 | Ingestion boundary — `/docs` |
@@ -231,6 +231,28 @@ What the detectors make of that traffic:
   *"Request rate for client_ip 10.2.14.9 is 14.1x the cohort baseline."*
 
 Empty at first? That is the warm-up ([section 4](#4-warming-the-detectors)), not a fault.
+
+<!-- TODO: screenshot — add during the Week 5 evidence pass. -->
+
+### The Guardian Threat Fusion dashboard
+
+The Week-3 view, and the one to put on screen during a demo: the fused threat picture and
+the two new detectors, across 18 panels.
+
+- **Current threat level** and **Threat level timeline** — the fused verdict, now and over
+  time, plus **Threat level change alerts**.
+- **Fusion threat score over time** and **Model contributions to the fusion score** — how
+  much of the current score each of ARGUS / SENTINEL / CASSANDRA is contributing, and
+  **Top contributing entities**.
+- **Corroborated entities (flagged by 2+ models)** — the corroboration boost made visible.
+  An entity here is one that two independent detectors agree on, which is the strongest
+  signal the system produces.
+- **SENTINEL** panels — `log_classification` alerts over time, top offending client IPs,
+  attack template families, malicious vs benign windows.
+- **CASSANDRA** panels — peak CUSUM drift over time, payers by peak volume drift,
+  `slow_exfiltration` alerts, cumulative drift evidence.
+- **Alerts over time by source** / **by source and type** — the whole detection layer's
+  output, split by which detector produced it.
 
 <!-- TODO: screenshot — add during the Week 5 evidence pass. -->
 

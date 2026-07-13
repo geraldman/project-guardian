@@ -630,6 +630,8 @@ Execute top to bottom on a running, **warmed** stack; every step states its pass
 19. **The picture heals.** Set `{"attack_mode": "off"}`. Within ~3–5 minutes `/threat`
     decays back to `threat_level: "normal"` on its own (2-minute contribution half-life)
     and a `normal` transition alert fires. Restore `mixed`.
-20. **Guardian Detection dashboard populated.** Dashboards → **Guardian Detection** (Global
-    tenant): anomaly-score line moving, alerts-by-type showing the Week-3 types alongside
-    ARGUS's, alert feed listing recent summaries.
+20. **Dashboards populated.** Dashboards (Global tenant) → **Guardian Detection**:
+    anomaly-score line moving, alerts-by-type showing the Week-3 types alongside ARGUS's,
+    alert feed listing recent summaries. Then **Guardian Threat Fusion**: current threat
+    level, per-model contributions, the SENTINEL and CASSANDRA panels, and any corroborated
+    entities.
