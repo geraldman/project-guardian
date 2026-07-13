@@ -14,6 +14,7 @@ volumes:
   redpanda-data:
   opensearch-data:
   argus-data:
+  cassandra-data:
 
 services:
   # ── Queue ────────────────────────────────────────────────────────────────
@@ -228,6 +229,9 @@ services:
       INPUT_TOPIC: guardian.telemetry.normalized
       SCORES_TOPIC: guardian.scores
       ALERTS_TOPIC: guardian.alerts
+      STATE_PATH: /data/cassandra_state.json
+    volumes:
+      - cassandra-data:/data
     networks: [guardian-net]
     depends_on:
       redpanda:
