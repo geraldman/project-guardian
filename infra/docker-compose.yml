@@ -170,7 +170,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── Detection / alerting (Week 2) ────────────────────────────────────────
+  # ── Detection (Week 2) ───────────────────────────────────────────────────
   argus:
     build: ../services/argus
     ports:
@@ -198,6 +198,68 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── Detection / fusion (Week 3) ──────────────────────────────────────────
+  sentinel:
+    build: ../services/sentinel
+    ports:
+      - "8004:8004"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      INPUT_TOPIC: guardian.telemetry.normalized
+      SCORES_TOPIC: guardian.scores
+      ALERTS_TOPIC: guardian.alerts
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  cassandra:
+    build: ../services/cassandra
+    ports:
+      - "8005:8005"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      INPUT_TOPIC: guardian.telemetry.normalized
+      SCORES_TOPIC: guardian.scores
+      ALERTS_TOPIC: guardian.alerts
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  fusion:
+    build: ../services/fusion
+    ports:
+      - "8006:8006"
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      INPUT_TOPIC: guardian.scores
+      SCORES_TOPIC: guardian.scores
+      ALERTS_TOPIC: guardian.alerts
+    networks: [guardian-net]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Alerting ─────────────────────────────────────────────────────────────
   alerting:
     build: ../services/alerting
     ports:
