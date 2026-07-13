@@ -45,6 +45,16 @@
           }
         },
         "error": { "type": "boolean" },
+        "log": {
+          "properties": {
+            "message": {
+              "type": "text",
+              "fields": {
+                "keyword": { "type": "keyword", "ignore_above": 1024 }
+              }
+            }
+          }
+        },
         "ingest": {
           "properties": {
             "pipeline_stage": { "type": "keyword" },
