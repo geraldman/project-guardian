@@ -33,3 +33,4 @@ docs/AI_USAGE_DISCLOSURE.md
 *.log
 .ipynb_checkpoints/
 training/datasets/
+scripts/out/
