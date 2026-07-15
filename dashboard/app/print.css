@@ -1,7 +1,227 @@
-/* Freeze-to-PDF print stylesheet — filled in by WP-D.
+/* Freeze-to-PDF print stylesheet (WP-D).
    Contract: screen UI lives under .hud-root; the frozen snapshot report is
-   rendered into a .print-only container that is hidden on screen. */
+   rendered into a .print-only container (portalled to <body>, OUTSIDE
+   .hud-root — a descendant of a display:none subtree could never be shown).
+   On screen the report is invisible; in print the HUD is hidden and the
+   report prints as a light-theme document. */
 
 .print-only {
   display: none;
+}
+
+@media print {
+  /* ── Swap layers ─────────────────────────────────────────────────────── */
+
+  .hud-root {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* ── Light theme: undo the dark HUD chrome from globals.css ─────────── */
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  @page {
+    margin: 14mm 12mm;
+  }
+
+  /* ── Report document ─────────────────────────────────────────────────── */
+
+  .sr-report {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+    color: #111111;
+  }
+
+  /* Monospace where exact identifiers/timestamps matter for the audit trail */
+  .sr-report .sr-id,
+  .sr-report .sr-num {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 9.5pt;
+  }
+
+  .sr-report h1 {
+    font-size: 17pt;
+    font-weight: 700;
+    margin: 0 0 6pt;
+  }
+
+  .sr-report h2 {
+    font-size: 12pt;
+    font-weight: 700;
+    margin: 0 0 5pt;
+    border-bottom: 1px solid #999999;
+    padding-bottom: 2pt;
+  }
+
+  .sr-report p {
+    margin: 0 0 5pt;
+  }
+
+  .sr-report ul {
+    margin: 0 0 5pt;
+    padding-left: 14pt;
+  }
+
+  .sr-header {
+    border-bottom: 2px solid #111111;
+    padding-bottom: 6pt;
+    margin-bottom: 10pt;
+  }
+
+  .sr-section {
+    margin-bottom: 12pt;
+  }
+
+  .sr-headline {
+    font-size: 11pt;
+    font-weight: 600;
+  }
+
+  .sr-empty {
+    color: #52514e;
+    font-style: italic;
+  }
+
+  /* ── Stat blocks (label over value) ──────────────────────────────────── */
+
+  .sr-meta,
+  .sr-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8pt 20pt;
+    margin: 0;
+    break-inside: avoid;
+  }
+
+  .sr-meta dt,
+  .sr-stats dt {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #52514e;
+  }
+
+  .sr-meta dd,
+  .sr-stats dd {
+    margin: 1pt 0 0;
+    font-weight: 600;
+  }
+
+  .sr-big {
+    font-size: 14pt;
+  }
+
+  /* ── Threat-level badge: color swatch + the level word in ink ────────── */
+  /* Color supplements the word, never replaces it (dataviz status rule).
+     print-color-adjust is scoped to the swatch — the one place color
+     conveys the threat level — so it survives "no background graphics". */
+
+  .sr-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4pt;
+    font-weight: 700;
+  }
+
+  .sr-swatch {
+    display: inline-block;
+    width: 9pt;
+    height: 9pt;
+    border: 1px solid #111111;
+    border-radius: 2pt;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .sr-level-normal .sr-swatch {
+    background: #0ca30c;
+  }
+
+  .sr-level-elevated .sr-swatch {
+    background: #fab219;
+  }
+
+  .sr-level-critical .sr-swatch {
+    background: #d03b3b;
+  }
+
+  /* ── Fusion-outage notice ────────────────────────────────────────────── */
+
+  .sr-outage {
+    border: 2px solid #111111;
+    padding: 6pt 8pt;
+    break-inside: avoid;
+  }
+
+  /* ── Tables: hairline borders that survive print ─────────────────────── */
+
+  .sr-report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+  }
+
+  .sr-report th,
+  .sr-report td {
+    border: 1px solid #999999;
+    padding: 3pt 5pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .sr-report th {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #f0efec;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .sr-report thead {
+    display: table-header-group; /* header repeats across page breaks */
+  }
+
+  .sr-report tr {
+    break-inside: avoid;
+  }
+
+  /* Numeric columns align vertically */
+  .sr-num-col {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    font-size: 9.5pt;
+    white-space: nowrap;
+  }
+
+  .sr-reasons {
+    word-break: break-word;
+  }
+
+  .sr-health {
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+
+  .sr-footer {
+    margin-top: 14pt;
+    padding-top: 5pt;
+    border-top: 1px solid #999999;
+    font-size: 8pt;
+    color: #52514e;
+  }
 }
