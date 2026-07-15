@@ -505,7 +505,7 @@ live generator running) before `warming_up` flips to `false`.
 | **No alerts, ever — but everything is healthy** | **Warm-up not complete.** By far the most common false alarm. | `curl :8002/health` (`warming_up`) and `:8005/health` (`payers_warm`). Fix: `python training/seed_history.py` ([section 6](#6-warm-up-and-seeding)). Also confirm `ATTACK_MODE` ≠ `off`. |
 | No alerts after a `docker compose down -v` | The `argus-data` / `cassandra-data` volumes were wiped with everything else | Same as above — re-seed. This is expected behaviour, not a bug. |
 | OpenSearch exits or restart-loops at boot; logs say `max virtual memory areas vm.max_map_count [65530] is too low` | Docker VM kernel limit (common on Windows/WSL2) | `wsl -d docker-desktop sysctl -w vm.max_map_count=262144`, then `docker compose up -d`. Persist via `%UserProfile%\.wslconfig`: `[wsl2]` / `kernelCommandLine = sysctl.vm.max_map_count=262144`, then `wsl --shutdown`. Native Linux: `sudo sysctl -w vm.max_map_count=262144`. |
-| OpenSearch or Redpanda killed / flapping under load | Docker VM out of memory | Allocate ≥ 8 GB to the Docker VM; the stack needs ~4–5 GB with the full detection triad. |
+| OpenSearch or Redpanda killed / flapping under load | Docker VM out of memory | Allocate ≥ 6 GB to the Docker VM (8 GB comfortable); the measured footprint is ~2.5 GB under a sustained 5M events/day load ([load test](load_test.md)), but other containers and page cache share the VM. |
 | Dashboards login rejects `admin` + your `.env` password | Password in `.env` changed **after** the OpenSearch data volume was created | Log in with the original password, or full wipe: `docker compose down -v && docker compose up -d` (destroys data *and baselines* — [section 5](#5-reset-and-recovery)). |
 | Dashboards shows "OpenSearch Dashboards server is not ready yet" | OpenSearch still within its ~60 s start period, or unhealthy | Wait for `docker compose ps` to show opensearch healthy; if it never does, `docker compose logs opensearch`. |
 | No documents arriving in Discover | Any hop of the pipeline | Widen Discover's time range first. Then walk the hops ([4.4](#44-checking-pipeline-health)). The first silent hop is the broken one. |
@@ -572,11 +572,15 @@ The MVP is single-node and demo-scaled on purpose. What would have to change:
   retention math done against actual ingest rate — out of scope for the MVP.
 - **Redpanda: 3 partitions, replication 1, ~6 h retention, 1 GB.** The queue is a transit
   buffer, not a store. Replication 1 means a broker loss loses the buffer.
-- **Throughput headroom.** The generator's default 10 events/s is throttled for laptop dev;
-  LTI's production figure is 5M+ transactions/day (~58/s average). Raise
-  `EVENTS_PER_SECOND` to load-test — the detection layer's per-minute bucketing cost grows
-  with *entities*, not events, so event rate is the cheaper axis to push. Formal load
-  testing is Week 4.
+- **Throughput headroom — measured.** The generator's default 10 events/s is throttled for
+  laptop dev; LTI's production figure is 5M+ transactions/day (~58/s average). The Week-4
+  load test ([docs/load_test.md](load_test.md), harness `scripts/load_test.py`) sustained
+  58 ev/s for 30 minutes end-to-end with zero loss — detection triad included — and moved
+  up to ~109 ev/s through the transport pipeline before the load *generator*, not the
+  pipeline, became the limit. SENTINEL is the CPU-dominant component: beyond ~60–80 ev/s
+  (or under heavy CPU co-contention) it backlogs gracefully in the queue — detections
+  delayed, never dropped. The per-minute bucketing cost still grows with *entities*, not
+  events, so event rate remains the cheaper axis to push.
 
 ## 10. End-to-end verification checklist
 
