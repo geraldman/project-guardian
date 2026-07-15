@@ -34,3 +34,4 @@ docs/AI_USAGE_DISCLOSURE.md
 .ipynb_checkpoints/
 training/datasets/
 scripts/out/
+.venv-val/
