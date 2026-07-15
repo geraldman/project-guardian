@@ -1,0 +1,160 @@
+/* Guardian Pulse design tokens + HUD grid (WP-0).
+   Token NAMES are frozen contract — components consume them; values may be
+   tuned centrally here. Level colors are reserved for threat/status semantics
+   only (green=normal/ok, amber=elevated/warn, red=critical/error). */
+
+:root {
+  --bg-0: #0a0e14; /* page */
+  --bg-1: #10161f; /* panel */
+  --bg-2: #1a2230; /* inset / nested surface */
+  --line: #232d3d;
+
+  --text-0: #e6edf3;
+  --text-1: #9fb0c3;
+  --text-2: #5c6b80;
+
+  --level-normal: #3fb950;
+  --level-elevated: #d29922;
+  --level-critical: #f85149;
+  --offline: #6e7681;
+  --accent: #39c5cf; /* sparingly: links, focus, sparkline line */
+
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --radius: 6px;
+  --gap: 12px;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--text-0);
+  background: var(--bg-0);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ── HUD shell ─────────────────────────────────────────────────────────── */
+
+.hud-root {
+  min-height: 100vh;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.hud-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.hud-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hud-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.hud-status-live {
+  color: var(--level-normal);
+}
+
+.hud-status-connecting {
+  color: var(--text-2);
+}
+
+.hud-status-stale {
+  color: var(--level-elevated);
+}
+
+.hud-grid {
+  flex: 1;
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: 3fr 2fr;
+  grid-template-rows: minmax(280px, auto) minmax(220px, auto);
+  grid-template-areas:
+    "threat heartbeats"
+    "narrative side";
+}
+
+.hud-area-threat {
+  grid-area: threat;
+}
+
+.hud-area-heartbeats {
+  grid-area: heartbeats;
+}
+
+.hud-area-narrative {
+  grid-area: narrative;
+}
+
+.hud-area-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+@media (max-width: 900px) {
+  .hud-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      "threat"
+      "heartbeats"
+      "narrative"
+      "side";
+  }
+}
+
+/* ── Shared panel primitive ───────────────────────────────────────────── */
+
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  height: 100%;
+}
+
+.panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
+.stub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  min-height: 80px;
+}
