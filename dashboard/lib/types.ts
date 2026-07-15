@@ -62,10 +62,19 @@ export interface ScorerStats {
   [k: string]: unknown;
 }
 
-export interface DriftEntry {
+// Shape of cassandra's GET /drift/top (services/cassandra/app/main.py):
+// a ranked list under "top", not a payer-keyed record.
+export interface DriftPayer {
+  payer_id: string;
   cusum_volume: number;
   cusum_amount: number;
   buckets_elevated: number;
+  warming_up: boolean;
+  buckets_observed: number;
+}
+
+export interface DriftTop {
+  top: DriftPayer[];
 }
 
 export type SourceResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -73,7 +82,7 @@ export type SourceResult<T> = { ok: true; data: T } | { ok: false; error: string
 export interface ScorerPulse {
   health: SourceResult<ScorerHealth>;
   stats: SourceResult<ScorerStats>;
-  drift_top?: SourceResult<Record<string, DriftEntry>>; // cassandra only
+  drift_top?: SourceResult<DriftTop>; // cassandra only
 }
 
 export interface PulseSnapshot {

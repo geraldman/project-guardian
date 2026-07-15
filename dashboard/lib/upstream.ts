@@ -5,7 +5,7 @@
 // client code — the browser only ever talks to /api/*.
 
 import type {
-  DriftEntry,
+  DriftTop,
   FusionThreat,
   PulseSnapshot,
   ScorerHealth,
@@ -58,7 +58,7 @@ export async function fetchPulse(): Promise<PulseSnapshot> {
     getJson<ScorerStats>(`${u.sentinel}/stats`),
     getJson<ScorerHealth>(`${u.cassandra}/health`),
     getJson<ScorerStats>(`${u.cassandra}/stats`),
-    getJson<Record<string, DriftEntry>>(`${u.cassandra}/drift/top`),
+    getJson<DriftTop>(`${u.cassandra}/drift/top`),
   ]);
 
   return {
