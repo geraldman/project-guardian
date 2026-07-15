@@ -1,0 +1,7 @@
+/* Freeze-to-PDF print stylesheet — filled in by WP-D.
+   Contract: screen UI lives under .hud-root; the frozen snapshot report is
+   rendered into a .print-only container that is hidden on screen. */
+
+.print-only {
+  display: none;
+}
