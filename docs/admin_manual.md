@@ -38,7 +38,7 @@ mock-lti → capture-agent → Redpanda (guardian.telemetry.raw) → Vector → 
                                                           └→ alerting → Slack/Discord/log
 ```
 
-### 1.1 The thirteen services
+### 1.1 The fourteen services
 
 | # | Service | Port | Built? | What it does | If it dies |
 |---|---|---|---|---|---|
@@ -55,6 +55,7 @@ mock-lti → capture-agent → Redpanda (guardian.telemetry.raw) → Vector → 
 | 11 | `cassandra` | 8005 | build | Per-payer CUSUM slow-exfiltration detector | Baselines are volume-backed; resumes warm. |
 | 12 | `fusion` | 8006 | build | Folds all scores into one decayed threat state; serves `/threat` | State is in-memory by design; re-forms from the live stream in ~2 min. |
 | 13 | `alerting` | 8003 | build | 5-minute dedup + Slack/Discord delivery (plus an HTTP inlet for OpenSearch monitors) | Alerts accumulate on the queue and are delivered on restart. |
+| 14 | `guardian-pulse` | 3000 | build | Guardian Pulse HUD — Next.js single pane over fusion + the scorers (threat lamp, heartbeats, narrative, freeze-to-PDF) | Cosmetic — detection, storage and alerting are untouched. Stateless; restart freely. |
 
 Component-level detail lives with each component: `services/*/README.md`,
 `infra/vector/vector.yaml`, `infra/opensearch/*.json` (index templates, ISM policy,
@@ -105,6 +106,7 @@ editing `infra/docker-compose.yml`:
 | `SCORES_TOPIC` / `ALERTS_TOPIC` | `guardian.scores` / `guardian.alerts` | argus, sentinel, cassandra, fusion (alerting consumes `ALERTS_TOPIC`) |
 | `STATE_PATH` | `/data/argus_state.json` | argus |
 | `STATE_PATH` | `/data/cassandra_state.json` | cassandra |
+| `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` | `http://fusion:8006` etc. | guardian-pulse (server-side proxy targets; never exposed to the browser) |
 
 ### Service-level settings not surfaced in compose
 
@@ -284,8 +286,9 @@ docker compose ps
 ```
 
 Every long-running service has a healthcheck (Redpanda: `rpk cluster health`; OpenSearch:
-cluster status green/yellow; Dashboards: `/api/status` green; the seven built services:
-HTTP `/health`). `opensearch-init` is a one-shot job — `Exited (0)` is its healthy state.
+cluster status green/yellow; Dashboards: `/api/status` green; the eight built services:
+HTTP `/health` — guardian-pulse's is `/api/health`). `opensearch-init` is a one-shot
+job — `Exited (0)` is its healthy state.
 
 **What the health states mean:**
 
@@ -375,7 +378,26 @@ curl -s http://localhost:8006/threat   # counters.scores_folded should climb dur
 
 # 8. Is the alerting service receiving/sending?
 curl -s http://localhost:8003/stats
+
+# 9. Is the HUD up, and can it see everything?
+curl -s http://localhost:3000/api/pulse   # per-source ok/error for fusion + all three scorers
 ```
+
+### 4.5 Guardian Pulse
+
+Stateless presentation container — no volume, restart freely. The compose healthcheck
+hits `GET /api/health` on `:3000` (liveness only: it stays healthy while scorers are
+down — the panel-level offline states are the intended signal instead).
+
+`GET /api/pulse` doubles as a one-call reachability probe of fusion plus all three
+scorers (check #9 above): every upstream the HUD cannot reach reports `ok:false` with
+the error string.
+
+Development on the host without Docker: `cd dashboard && npm ci && npm run dev` — the
+proxy falls back to the published `localhost` ports, so the HUD runs against a live
+stack or renders offline states against a dead one. Pick another port with
+`npm run dev -- -p 3100` if the container already owns `:3000`. Narrative engine tests:
+`node --test lib/narrative/*.test.ts`.
 
 ## 5. Reset and recovery
 

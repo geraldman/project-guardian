@@ -186,6 +186,7 @@ Real responses on a warm stack (verified live):
 | SENTINEL | http://localhost:8004 | Log classifier — `/health`, `/stats`, `/templates` |
 | CASSANDRA | http://localhost:8005 | Slow-exfil detector — `/health`, `/stats`, `/drift/top`, `/baseline/payer/{id}` |
 | fusion | http://localhost:8006 | **Unified threat picture** — `/health`, `/threat` |
+| Guardian Pulse | http://localhost:3000 | **The live HUD** — threat level, model heartbeats, incident narrative, freeze-to-PDF compliance snapshot |
 
 **Dashboards login:** username `admin`, password is the value of
 `OPENSEARCH_ADMIN_PASSWORD` (default `Guardian!Lti2026` if you did not override it).
@@ -253,6 +254,35 @@ the two new detectors, across 18 panels.
   `slow_exfiltration` alerts, cumulative drift evidence.
 - **Alerts over time by source** / **by source and type** — the whole detection layer's
   output, split by which detector produced it.
+
+<!-- TODO: screenshot — add during the Week 5 evidence pass. -->
+
+### The Guardian Pulse HUD
+
+http://localhost:3000 — the single pane an operator keeps open. Where the dashboards
+above are the workhorse SIEM view (history, drill-down, evidence), Guardian Pulse shows
+*right now*, refreshed every 5 seconds:
+
+- **Threat Level** — fusion's fused verdict as a lamp (NORMAL / ELEVATED / CRITICAL),
+  the decayed anomaly score against its alert thresholds, how long the platform has been
+  in the current state, and a sparkline of the score's recent history. A STALE badge
+  means the HUD lost its own server; a grey "FUSION OFFLINE" lamp means fusion itself is
+  unreachable.
+- **Model Heartbeats** — one vitals card per detector (ARGUS / SENTINEL / CASSANDRA):
+  status, warm-up progress, headline stats, and each model's current contribution to the
+  fused score. An unreachable scorer dims its own card; the others keep reporting.
+- **Incident Narrative** — a plain-English summary of the current picture: what level,
+  which models are driving it, which entities are corroborated, when it last escalated.
+  Assembled from fixed templates — deterministic, not generative.
+- **Transitions** — the session's threat-level changes, newest first.
+- **Freeze to PDF** — one click freezes the current snapshot and narrative and opens the
+  browser print dialog; choose "Save as PDF" for a light-theme, searchable compliance
+  report (timestamps, threat state, model contributions, top entities, transitions,
+  scorer health). This is the audit-trail artifact. The outage case works too: freezing
+  while something is down records exactly that, which is still compliance evidence.
+
+The HUD needs no login and holds no state; if a panel shows "offline", the fix is at
+the service it mirrors, never in the HUD.
 
 <!-- TODO: screenshot — add during the Week 5 evidence pass. -->
 

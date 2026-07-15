@@ -95,6 +95,7 @@ Then open:
 | SENTINEL | http://localhost:8004/docs | Log-content classifier |
 | CASSANDRA | http://localhost:8005/docs | Slow-exfiltration detector |
 | fusion | http://localhost:8006/threat | **Unified threat picture** |
+| Guardian Pulse | http://localhost:3000 | **The live HUD** — threat lamp, model heartbeats, narrative, freeze-to-PDF |
 | OpenSearch API | https://localhost:9200 | Storage/index (self-signed TLS) |
 
 Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
@@ -103,6 +104,10 @@ Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
 
 ## Where to see results
 
+- **Guardian Pulse** (http://localhost:3000) — the single-pane HUD: fused threat level with
+  score gauge and history, one heartbeat card per detector, a template-based plain-English
+  incident narrative, and one-click **Freeze to PDF** compliance snapshots (the audit-trail
+  artifact).
 - **OpenSearch Dashboards** (http://localhost:5601) — three dashboards, all imported
   automatically at startup into the **Global** tenant: **Guardian Traffic Overview** (raw traffic),
   **Guardian Detection** (anomaly scores + live alert feed), and **Guardian Threat Fusion** (the
@@ -196,7 +201,7 @@ services/sentinel/   log-line classifier (Drain3 + XGBoost)
 services/cassandra/  slow-exfiltration detector (per-payer CUSUM)
 services/fusion/     unified Guardian threat state + /threat endpoint
 services/alerting/   dedup + Slack/Discord webhook alerter
-dashboard/           Guardian Pulse HUD (Next.js)                  (Week 4 — stub)
+dashboard/           Guardian Pulse HUD (Next.js single-pane SOC view, :3000)
 training/            detector warm-up seeders + SENTINEL training script
 docs/                architecture, user/admin manuals
 ```

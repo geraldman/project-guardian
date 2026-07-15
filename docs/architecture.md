@@ -37,9 +37,11 @@ indices. OpenSearch Alerting monitors (e.g. `guardian-error-rate-spike`) post in
 alerting service's `/notify` endpoint via a notification channel, so SIEM-native alerts
 share the same dedup window as ARGUS alerts.
 
-Extra-credit layers still to come (later weeks): SENTINEL / CASSANDRA scorer
-microservices (they will consume `guardian.telemetry.normalized` exactly like ARGUS),
-Guardian Pulse HUD. See each service's README.
+On top of the detection layer sits the presentation layer: the Guardian Pulse HUD
+(`guardian-pulse`, :3000) polls fusion and the scorers over HTTP and renders the
+single-pane operator view — see
+[Presentation layer](#presentation-layer--guardian-pulse-hud-week-4) and each
+service's README.
 
 ## Port / hostname allocations (contract)
 
@@ -58,6 +60,7 @@ Guardian Pulse HUD. See each service's README.
 | SENTINEL | `sentinel` | 8004 | 8004 |
 | CASSANDRA | `cassandra` | 8005 | 8005 |
 | fusion | `fusion` | 8006 | 8006 |
+| Guardian Pulse HUD | `guardian-pulse` | 3000 | 3000 |
 
 Queue topics (all 3 partitions, replication 1, ~6h retention — OpenSearch is the
 durable store). Network: single bridge `guardian-net`.
@@ -348,7 +351,7 @@ change:
 Global threat level moves through `normal → elevated → critical` (with hysteresis on the
 decayed global score). On a level transition fusion raises `alert.type:
 "threat_level_change"` (`alert.source: "guardian"`), and exposes the current picture at
-`GET /threat` for the future Guardian Pulse HUD.
+`GET /threat` for the Guardian Pulse HUD.
 
 ### New alert types (Week 3)
 
@@ -361,6 +364,31 @@ decayed global score). On a level transition fusion raises `alert.type:
 | `threat_level_change` | `guardian` | the global threat level transitions (normal↔elevated↔critical) |
 
 The alerting service's `(entity_type, entity_id, type)` dedup applies unchanged.
+
+## Presentation layer — Guardian Pulse HUD (Week 4)
+
+`guardian-pulse` (Next.js, `dashboard/`) is a read-only client of the detection layer:
+each 5-second poll gathers fusion's `/threat`, every scorer's `/health` + `/stats` and
+CASSANDRA's `/drift/top`, and renders the single-pane HUD — threat lamp + decayed-score
+gauge, per-model heartbeat cards, a deterministic template narrative, the session
+transition log, and a freeze-to-PDF compliance snapshot.
+
+Two design points are contracts:
+
+- **Server-side proxy.** The browser only ever talks to `:3000`. The Next.js server
+  resolves `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` (docker-internal
+  hostnames from the compose block, `localhost` fallbacks for `npm run dev` on the host)
+  and fans all upstream calls out into one aggregate `GET /api/pulse` response with a
+  per-source `ok`/`error` envelope — a dead scorer degrades its panel, never the page,
+  and internal hostnames never reach client code.
+- **`GET /api/health` is pure liveness** (the compose healthcheck) and deliberately not
+  gated on upstream reachability: `depends_on` already gates startup, and tying liveness
+  to the scorers would flap the container whenever one restarts.
+
+The narrative is template-based by design — fixed sentence fragments keyed on the fusion
+state, reason tags translated through a dictionary mirroring fusion's `_reason_tag()`
+vocabulary — so the same frozen snapshot always yields the same words, which is what
+makes the frozen PDF defensible as compliance evidence. No LLM is involved.
 
 ## Index lifecycle
 
@@ -427,3 +455,19 @@ build on it. The compose file already declares the new services, so no branch ed
 | `feat/dashboards-w3` | `infra/dashboards/*_w3.ndjson` (new bundles) |
 | `feat/docs-w3` | manuals + `README.md` |
 | `fix/w3-integration` | reserved (integration fixes) |
+
+## Branch ownership (Week 4)
+
+`feat/pulse-scaffold` lands first (the Next.js skeleton plus the frozen internal
+contracts: `lib/types.ts`, the server-side proxy and both API routes, the polling hook,
+the layout grid and design tokens, the Dockerfile); the panel branches build on it and
+own disjoint files, so they merge without conflicts:
+
+| Branch | Exclusively owns |
+|---|---|
+| `feat/pulse-scaffold` | `dashboard/**` skeleton: `lib/`, `app/`, stubs, `Dockerfile` |
+| `feat/pulse-threat` | `ThreatIndicator`, `Sparkline`, `TransitionLog` components |
+| `feat/pulse-heartbeats` | `HeartbeatRow`, `HeartbeatPanel` components |
+| `feat/pulse-narrative` | `lib/narrative/**`, `NarrativePanel` component |
+| `feat/pulse-freeze` | `FreezeButton`, `SnapshotReport`, `app/print.css` |
+| `feat/pulse-docs` | manuals + `dashboard/README.md` |
