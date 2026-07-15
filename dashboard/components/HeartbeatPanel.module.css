@@ -1,0 +1,139 @@
+/* Heartbeat panels (WP-B): nested scorer cards inside the heartbeats panel.
+   Status tokens (--level-*, --offline) are reserved semantics; the fusion
+   contribution bar is a magnitude and wears --accent, never a status color. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.offline {
+  opacity: 0.55;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.caption {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-1);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dotOk {
+  background: var(--level-normal);
+}
+
+.dotWarn {
+  background: var(--level-elevated);
+}
+
+.dotError {
+  background: var(--level-critical);
+}
+
+.dotOffline {
+  background: var(--offline);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.rowLabel {
+  color: var(--text-2);
+}
+
+.rowValue {
+  color: var(--text-0);
+  text-align: right;
+}
+
+.warnLine {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--level-elevated);
+}
+
+.contrib {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.contribLabel {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.contribValue {
+  color: var(--text-0);
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
