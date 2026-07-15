@@ -1,0 +1,185 @@
+/* WP-A: hero threat panel. All colors come from the frozen tokens in
+   globals.css; the level classes set a local --level custom property that the
+   lamp, label and gauge fill consume. Status hues carry status only. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.levelNormal {
+  --level: var(--level-normal);
+}
+
+.levelElevated {
+  --level: var(--level-elevated);
+}
+
+.levelCritical {
+  --level: var(--level-critical);
+}
+
+.offline {
+  --level: var(--offline);
+}
+
+.badge {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.badgeStale {
+  color: var(--level-elevated); /* amber: genuine staleness warning */
+}
+
+.badgeConnecting {
+  color: var(--text-2);
+}
+
+.lamp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.lampDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--level);
+  flex: none;
+}
+
+.lampLabel {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--level);
+}
+
+.lampPulse {
+  animation: lamp-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes lamp-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--level);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 12px 3px var(--level);
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lampPulse {
+    animation: none;
+  }
+}
+
+.offlineDetail {
+  font-size: 11px;
+  color: var(--text-2);
+  align-self: flex-end;
+}
+
+/* hero figure: proportional digits (no tabular-nums at display size) */
+.score {
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text-0);
+}
+
+.gauge {
+  margin: 10px 0 0;
+}
+
+.gaugeTrack {
+  position: relative;
+  height: 10px;
+  background: var(--bg-2);
+  border-radius: 5px;
+}
+
+.gaugeFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--level);
+  border-radius: 5px 4px 4px 5px;
+}
+
+.gaugeTick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--text-2);
+}
+
+.gaugeScale {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums; /* axis-tick style figures */
+}
+
+.gaugeScale span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.gaugeScale .gaugeScaleMin {
+  left: 0;
+  transform: none;
+}
+
+.gaugeScale .gaugeScaleMax {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.ticker {
+  min-height: 18px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.spark {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.sparkLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.sparkEmpty {
+  font-size: 12px;
+  color: var(--text-2);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
