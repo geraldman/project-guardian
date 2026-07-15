@@ -55,7 +55,7 @@ entire system with no external infrastructure and no real data.
 | Requirement | Detail |
 |---|---|
 | Docker Desktop | A recent version with Docker Compose v2.20 or later (the root compose file uses the `include` directive). Works on Windows (WSL2), macOS, and Linux. |
-| RAM | Allocate **at least 8 GB** to the Docker VM (Docker Desktop → Settings → Resources). The stack uses roughly 4–5 GB under load; OpenSearch (512 MB JVM heap plus off-heap usage) and Redpanda (1 GB reserved) are the two big consumers, and the detection triad adds ~600 MB between them. |
+| RAM | Allocate **at least 6 GB** to the Docker VM (Docker Desktop → Settings → Resources); 8 GB gives comfortable headroom. Measured, not estimated: the full 14-service stack uses **~2.5 GB under a sustained 5M events/day load** ([load test](load_test.md)); OpenSearch (~1.4 GB) and Redpanda (~0.3 GB) are the two big consumers. |
 | Disk | A few GB free for container images and indexed data. |
 | Python 3.10+ on the host | Only for the warm-up seeders in `training/` — stdlib only, no `pip install` needed. |
 | Git | To clone the repository. |

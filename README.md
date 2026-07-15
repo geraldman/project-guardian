@@ -183,6 +183,7 @@ happen for each, are in the [User Manual](docs/user_manual.md#7-driving-the-atta
 | [docs/user_manual.md](docs/user_manual.md) | Operating the system: start it, warm it, drive attacks, read the dashboards, interpret alerts |
 | [docs/admin_manual.md](docs/admin_manual.md) | Running and maintaining it: services, configuration, volumes, tuning, retraining, troubleshooting |
 | [docs/architecture.md](docs/architecture.md) | The design and the pinned cross-service contracts |
+| [docs/load_test.md](docs/load_test.md) | Measured throughput and RAM: the 5M events/day sustained run, ceiling search, and bottleneck analysis |
 
 Each service also documents its own design, knobs, and endpoints in its README —
 [mock-lti](services/mock-lti/README.md), [capture](services/capture/README.md),
@@ -225,5 +226,10 @@ baselines**. Detection goes cold and stays cold until they re-warm — re-seed. 
 | 1 | Mandatory pipeline end-to-end | ✅ done |
 | 2 | ARGUS scorer + alerting | ✅ done |
 | 3 | SENTINEL + CASSANDRA + unified Guardian score | ✅ done |
-| 4 | Guardian Pulse HUD + load testing | ⬜ |
+| 4 | Guardian Pulse HUD + load testing | ✅ done |
+
+The Week-4 load test measured the stack sustaining the full **5M events/day** figure
+(58 ev/s × 30 min) end-to-end with zero telemetry loss, detection triad included, in
+**~2.5 GB of RAM** — methodology, ceiling search and bottleneck analysis in
+[docs/load_test.md](docs/load_test.md).
 | 5 | Docs, evidence, presentation | ⬜ |
