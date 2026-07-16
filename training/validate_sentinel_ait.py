@@ -102,25 +102,35 @@ def to_envelope(rec: dict) -> dict:
     }
 
 
-def label_is_attack(label_line: str) -> bool:
-    """A parallel label line marks its log line as attack when it names any
-    label other than the normal/empty sentinels. v1.1 puts one or two
-    comma-separated tags per line; benign lines are empty or '0'."""
-    s = label_line.strip()
-    if not s:
-        return False
-    tags = {t.strip().lower() for t in s.split(",") if t.strip()}
-    return bool(tags - {"0", "normal", "-", "none"})
+_BENIGN_TAGS = {"0", "normal", "-", "none", ""}
+
+
+def _group(tag: str) -> str:
+    """Collapse AIT's fine-grained tags into attack classes. AIT labels every
+    post-exploitation webshell command separately (webshell-id, webshell-ls-*,
+    ...); group them, and fold the mail-curl webshell-upload variants together."""
+    if tag.startswith("webshell"):
+        return "webshell-cmd"       # C2 commands run THROUGH the shell
+    if tag.startswith("mail-curl"):
+        return "webshell-upload"    # the exploit that plants the shell
+    return tag                       # hydra (brute-force), nikto (scanner)
+
+
+def label_tags(label_line: str) -> set[str]:
+    """Attack classes on a parallel label line (v1.1: comma-separated,
+    '0'=benign). Empty set means benign."""
+    return {_group(t.strip().lower()) for t in label_line.strip().split(",")
+            if t.strip().lower() not in _BENIGN_TAGS}
 
 
 def find_pairs(root: Path) -> list[tuple[Path, Path]]:
     """Locate (apache access log, matching label file) pairs.
 
-    AIT mirrors the log tree under a labels/ root: a log at
-    <root>/<testbed>/gather/<host>/logs/apache2/<name> has its labels at
-    <root>/<testbed>/labels/gather/<host>/logs/apache2/<name>. We glob for
-    access logs and derive the label path by inserting 'labels/' after the
-    testbed dir; if that misses we search by basename under any labels/ tree.
+    AIT v1.1 mirrors the log tree under a sibling labels/ root: a log at
+    <root>/data/<host>/apache2/<name> has its labels at
+    <root>/labels/<host>/apache2/<name>. We glob the data/ tree for access
+    logs and swap the leading 'data' for 'labels'; a basename search under
+    labels/ is the fallback.
     """
     pairs: list[tuple[Path, Path]] = []
     access_logs = [
@@ -129,10 +139,9 @@ def find_pairs(root: Path) -> list[tuple[Path, Path]]:
     ]
     label_files = {p.name: p for p in root.rglob("*access*.log") if "labels" in p.parts}
     for log_path in access_logs:
-        rel = log_path.relative_to(root)
-        parts = list(rel.parts)
-        cand = root.joinpath(parts[0], "labels", *parts[1:])
-        if cand.exists():
+        parts = list(log_path.relative_to(root).parts)
+        cand = root.joinpath("labels", *parts[1:]) if parts and parts[0] == "data" else None
+        if cand is not None and cand.exists():
             pairs.append((log_path, cand))
         elif log_path.name in label_files:
             pairs.append((log_path, label_files[log_path.name]))
@@ -141,13 +150,16 @@ def find_pairs(root: Path) -> list[tuple[Path, Path]]:
 
 def evaluate(pairs: list[tuple[Path, Path]], settings: Settings, model: SentinelModel) -> dict:
     """Feed every (log, label) pair through a fresh Pipeline per testbed-host
-    and tally window-level detection against aggregated ground truth."""
-    counts = defaultdict(int)  # tp/fp/fn/tn windows, and line-level tallies
+    and tally window-level detection against aggregated ground truth, plus
+    per-attack-family window recall."""
+    counts: dict[str, int] = defaultdict(int)          # tp/fp/fn/tn windows
+    fam_total: dict[str, int] = defaultdict(int)       # windows containing family
+    fam_hit: dict[str, int] = defaultdict(int)         # ...that were flagged
     for log_path, label_path in pairs:
         pipe = Pipeline(settings, model)
         pipe.register_partitions([0])
-        win_gt: dict[tuple[str, int], bool] = {}       # (ip, minute) -> any attack line
-        win_pred: dict[tuple[str, int], bool] = {}     # (ip, minute) -> alerted
+        win_gt: dict[tuple[str, int], set[str]] = defaultdict(set)  # -> attack families
+        win_pred: dict[tuple[str, int], bool] = {}
         wsec = settings.window_seconds
 
         with log_path.open(encoding="utf-8", errors="replace") as lf, \
@@ -156,24 +168,25 @@ def evaluate(pairs: list[tuple[Path, Path]], settings: Settings, model: Sentinel
                 rec = parse_apache(raw)
                 if rec is None:
                     continue
-                attack = label_is_attack(lab)
+                tags = label_tags(lab)
                 minute = int(rec["ts"].timestamp() // wsec) * wsec
                 key = (rec["ip"], minute)
-                win_gt[key] = win_gt.get(key, False) or attack
-                if attack:
+                if tags:
+                    win_gt[key] |= tags
                     counts["attack_lines"] += 1
-                # Feed the event; finalize any minutes the watermark releases.
+                else:
+                    win_gt.setdefault(key, set())
                 for ready in pipe.add_event(to_envelope(rec), 0):
                     for a in pipe.finalize(ready)[1]:
                         win_pred[(a["alert"]["entity_id"], ready)] = True
 
-        # Finalize whatever remains at stream end (single deterministic pass).
         for minute in sorted(pipe._buckets.keys()):
             for a in pipe.finalize(minute)[1]:
                 win_pred[(a["alert"]["entity_id"], minute)] = True
 
-        for key, is_attack in win_gt.items():
+        for key, families in win_gt.items():
             alerted = win_pred.get(key, False)
+            is_attack = bool(families)
             if is_attack and alerted:
                 counts["tp"] += 1
             elif is_attack and not alerted:
@@ -182,7 +195,11 @@ def evaluate(pairs: list[tuple[Path, Path]], settings: Settings, model: Sentinel
                 counts["fp"] += 1
             else:
                 counts["tn"] += 1
-    return counts
+            for fam in families:
+                fam_total[fam] += 1
+                if alerted:
+                    fam_hit[fam] += 1
+    return {"counts": dict(counts), "fam_total": dict(fam_total), "fam_hit": dict(fam_hit)}
 
 
 def prf(tp: int, fp: int, fn: int) -> tuple[float, float, float]:
@@ -237,16 +254,50 @@ def main() -> int:
         return 1
     print(f"found {len(pairs)} apache-access/label file pairs")
 
-    c = evaluate(pairs, settings, model)
-    p, r, f = prf(c["tp"], c["fp"], c["fn"])
-    total_win = c["tp"] + c["fp"] + c["fn"] + c["tn"]
-    print("\n## SENTINEL vs AIT-LDS v1.1 — window-level detection")
-    print(f"attack lines in ground truth: {c['attack_lines']}")
-    print(f"windows: {total_win}  (tp {c['tp']}  fp {c['fp']}  fn {c['fn']}  tn {c['tn']})")
-    print(f"precision {p:.3f}  recall {r:.3f}  f1 {f:.3f}")
-    fp_rate = c["fp"] / (c["fp"] + c["tn"]) if (c["fp"] + c["tn"]) else 0.0
-    print(f"benign-window false-positive rate: {fp_rate:.4f}  "
-          "(domain-mismatch caveat: AIT benign traffic is WordPress/webmail, not /api/v1)")
+    lines: list[str] = []
+
+    def emit(s: str = "") -> None:
+        lines.append(s)
+        print(s)
+
+    def report(res: dict, title: str) -> None:
+        c = res["counts"]
+        tp, fp, fn, tn = c.get("tp", 0), c.get("fp", 0), c.get("fn", 0), c.get("tn", 0)
+        p, r, f = prf(tp, fp, fn)
+        fp_rate = fp / (fp + tn) if (fp + tn) else 0.0
+        emit(f"\n## {title}")
+        emit(f"windows: {tp + fp + fn + tn}  (tp {tp}  fp {fp}  fn {fn}  tn {tn})")
+        emit(f"precision {p:.3f}  recall {r:.3f}  f1 {f:.3f}  |  benign FP rate {fp_rate:.3f}")
+        fams = res["fam_total"]
+        if fams:
+            emit("per-attack-class window recall:")
+            for fam in sorted(fams, key=lambda k: -fams[k]):
+                hit, tot = res["fam_hit"].get(fam, 0), fams[fam]
+                emit(f"  {fam:16s} {hit:4d}/{tot:<4d}  ({hit / tot:.1%})")
+
+    shipped = evaluate(pairs, settings, model)
+    emit(f"AIT-LDS v1.1 - SENTINEL external validation ({len(pairs)} testbeds)")
+    emit(f"attack lines in ground truth: {shipped['counts'].get('attack_lines', 0)}")
+    report(shipped, "As-shipped (scanner rule treats .php as a probe -- true for LTI, not for Horde)")
+
+    # Ablation: neutralize ONLY the `.php` clause of the scanner signature. It
+    # encodes "this stack is not PHP" (true for LTI, false for AIT's Horde
+    # webmail), so it flags all benign .php traffic. Stack-agnostic signatures
+    # (`../` traversal, SQL metacharacters, dotfiles, /wp-, /actuator) stay on.
+    # This isolates the single stack assumption's cost; shipped code untouched.
+    import app.rules as rules
+    original = rules._SCANNER_RE
+    rules._SCANNER_RE = re.compile(r"(?i)(^/\.|/\.git\b|/phpmyadmin|/actuator/|^/wp-)")
+    try:
+        ablated = evaluate(pairs, settings, model)
+    finally:
+        rules._SCANNER_RE = original
+    report(ablated, "Ablation: .php-means-probe disabled (stack-agnostic signatures only)")
+
+    emit("\nProduction model and rules are unchanged; the ablation is analysis only.")
+    out = _REPO / "training" / "datasets" / "sentinel_ait_result.md"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    print(f"\n[written] {out}")
     return 0
 
 
