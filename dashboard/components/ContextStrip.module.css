@@ -1,0 +1,49 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.value {
+  font-size: 13px;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-size: 10px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sep {
+  width: 1px;
+  height: 11px;
+  background: var(--line);
+}
+
+.unknown {
+  font-size: 10px;
+  color: var(--level-elevated);
+  border: 1px solid color-mix(in srgb, var(--level-elevated) 45%, transparent);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+@media (max-width: 620px) {
+  .root {
+    gap: 8px;
+  }
+
+  .sep {
+    display: none;
+  }
+}

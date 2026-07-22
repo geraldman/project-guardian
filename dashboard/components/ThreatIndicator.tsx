@@ -62,7 +62,24 @@ export default function ThreatIndicator({ snapshot, history, status }: ThreatInd
             />
             <span className={styles.lampLabel}>{threat.threat_level.toUpperCase()}</span>
           </div>
-          <div className={styles.score}>{threat.anomaly_score.toFixed(3)}</div>
+          <div className={styles.scoreLine}>
+            <span className={styles.score}>{threat.anomaly_score.toFixed(3)}</span>
+            {/* Corroboration is fusion's precision signal: how many models
+                independently accused the same entity. One model agreeing with
+                itself is a much weaker claim than two, at any score. */}
+            <span
+              className={
+                threat.corroboration >= 2
+                  ? `${styles.corroboration} ${styles.corrStrong}`
+                  : `${styles.corroboration} ${styles.corrWeak}`
+              }
+              title="maximum number of models simultaneously flagging one entity"
+            >
+              {threat.corroboration >= 2
+                ? `✦ ${threat.corroboration} models agree`
+                : "single-model claim"}
+            </span>
+          </div>
           <div className={`${styles.gauge} ${LEVEL_CLASS[threat.threat_level]}`}>
             <div className={styles.gaugeTrack}>
               <span className={styles.gaugeFill} style={{ width: `${score * 100}%` }} />

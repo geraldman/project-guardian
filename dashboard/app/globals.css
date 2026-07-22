@@ -20,6 +20,9 @@
   --accent: #39c5cf; /* sparingly: links, focus, sparkline line */
 
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  /* Prose only. Mono is right for telemetry and wrong for paragraphs — the
+     narrative panel is the one place the HUD asks you to read sentences. */
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --radius: 6px;
   --gap: 12px;
 }
@@ -52,6 +55,7 @@ a {
 /* ── HUD shell ─────────────────────────────────────────────────────────── */
 
 .hud-root {
+  position: relative;
   min-height: 100vh;
   padding: var(--gap);
   display: flex;
@@ -59,11 +63,82 @@ a {
   gap: var(--gap);
 }
 
+/* ── Threat state as page-level treatment ─────────────────────────────────
+   One lamp is not enough for a wall display. --state-color is set here and
+   consumed by the header rule and the ambient wash below, so severity is
+   readable before any text is. "offline" is deliberately grey, not green:
+   absence of data must never look like absence of threat. */
+
+.hud-root[data-level="normal"] {
+  --state-color: var(--level-normal);
+}
+
+.hud-root[data-level="elevated"] {
+  --state-color: var(--level-elevated);
+}
+
+.hud-root[data-level="critical"] {
+  --state-color: var(--level-critical);
+}
+
+.hud-root[data-level="offline"] {
+  --state-color: var(--offline);
+}
+
+.hud-root::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 180px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--state-color, transparent) 16%, transparent),
+    transparent
+  );
+  transition: opacity 400ms ease-out;
+}
+
+.hud-root[data-level="elevated"]::before {
+  opacity: 0.75;
+}
+
+.hud-root[data-level="critical"]::before {
+  opacity: 1;
+}
+
+.hud-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-root::before,
+  .hud-header {
+    transition: none;
+  }
+}
+
 .hud-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid var(--line);
+  /* Threat state repaints the header rule, so the page frame itself carries
+     the signal rather than leaving it to one lamp. */
+  border-bottom-color: var(--state-color, var(--line));
+  transition: border-bottom-color 300ms ease-out;
+}
+
+.hud-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .hud-header h1 {
@@ -91,19 +166,29 @@ a {
   color: var(--level-elevated);
 }
 
+/* Reading order top-left to bottom-right: how bad -> who -> what changed, with
+   the trust check (heartbeats) below the fold of the incident answer itself.
+   The right rail spans full height so transitions and the compliance snapshot
+   stay reachable without scrolling past the entity list. */
 .hud-grid {
   flex: 1;
   display: grid;
   gap: var(--gap);
-  grid-template-columns: 3fr 2fr;
-  grid-template-rows: minmax(280px, auto) minmax(220px, auto);
+  grid-template-columns: minmax(300px, 4fr) minmax(320px, 5fr) minmax(250px, 3fr);
+  grid-template-rows: auto auto 1fr;
   grid-template-areas:
-    "threat heartbeats"
-    "narrative side";
+    "threat     entities   side"
+    "heartbeats heartbeats side"
+    "narrative  narrative  side";
 }
 
 .hud-area-threat {
   grid-area: threat;
+}
+
+.hud-area-entities {
+  grid-area: entities;
+  min-height: 0;
 }
 
 .hud-area-heartbeats {
@@ -119,14 +204,26 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  min-height: 0;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
   .hud-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: none;
     grid-template-areas:
+      "threat     entities"
+      "heartbeats heartbeats"
+      "narrative  side";
+  }
+}
+
+@media (max-width: 780px) {
+  .hud-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
       "threat"
+      "entities"
       "heartbeats"
       "narrative"
       "side";
@@ -141,6 +238,7 @@ a {
   border-radius: var(--radius);
   padding: 14px;
   height: 100%;
+  min-width: 0;
 }
 
 .panel-title {
