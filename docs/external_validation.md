@@ -87,12 +87,6 @@ implicit behind a self-referential 1.0 accuracy.
 
 ## Track B — CASSANDRA vs CERT r4.2 insider-threat dataset
 
-**Status (2026-07-22): run complete on `file.csv`, but UNSUPERVISED — CERT ships
-its ground-truth labels in a separate `answers.tar.bz2` that is not in hand, so
-no precision, recall, or detection delay can be reported here.** What follows is
-a structural result, not a scored one. The scored numbers are a download away and
-the harness computes them automatically once `insiders.csv` is present.
-
 **Dataset & method.** [CERT r4.2](https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247)
 (CMU SEI / ExactData, DARPA I2O) is 1000 users over 17 months with an
 unrealistically dense population of red-team insiders, including a
@@ -106,52 +100,82 @@ does. CUSUM on standardized per-bucket z is bucket-duration-agnostic, so the
 shipped `Params` (warmup 30 buckets, k=0.75, h=6/10) apply at day granularity
 unchanged — this validates the *shipped* detector, not a re-tuned one.
 
-**Result.** 264 of the 1000 users have any removable-media activity.
-**CASSANDRA flagged exactly one: `CCL0068`.**
+**Results.** 264 of the 1000 users have any removable-media activity: 195 benign,
+69 of the 70 labelled insiders. CASSANDRA flagged exactly one user, `CCL0068`,
+and it is a true positive.
 
-The warmup is not what produced that number: 229 of the 264 users span ≥30
-calendar days and the median user spans 494 days with 653 copies, so the
-population overwhelmingly clears the 30-bucket warmup and is genuinely eligible
-to alarm. One flag out of 264 eligible users is a detector decision, not an
-artifact of insufficient history.
+| | value |
+|---|---|
+| Detected | **1 / 70** insiders (1.4%) |
+| False alarms | **0 / 195** benign users (**0.000%**) |
+| Precision | 1.000 (one flag, one insider) |
+| Detection delay | 46 days into a 57-day exfil window |
 
-| | copies / active day | span | flagged |
-|---|---|---|---|
-| `CCL0068` | 2.4–3.8 for 13 consecutive 30-day blocks, then **5.5** | 415 d | **yes** |
-| 10 heaviest users (`HSB0196`, `AJF0370`, `LBH0942`, …) | 23–27, stable throughout | ~500 d | no |
+Recall is not uniform across the red-team scenarios, and the split is the whole
+story:
 
-**What this means (the honest reading).** The shape of the one flag is the
-finding. `CCL0068` is a *light* user — roughly 3 copies a day for over a year —
-whose final 30-day block rises to a sustained 5.5/day. In absolute terms that is
-a fifth of what the heaviest users do routinely. The ten heaviest users move
-23–27 files every working day for 500 days and CASSANDRA stays silent on all of
-them, because for *them* that volume is normal.
+| scenario | insiders | observable | with a pre-attack baseline | detected |
+|---|---|---|---|---|
+| 1 — never used removable media, then starts | 30 | 29 | **0** | 0 |
+| 2 — escalating thumb-drive theft | 30 | 30 | 30 | **1** |
+| 3 — sysadmin sabotage | 10 | 10 | 4 | 0 |
 
-This is the per-entity baseline earning its complexity on data it was never tuned
-on. Any global threshold is caught between the two rows of that table: set it
-below ~24/day and it fires continuously on ten heavy-but-legitimate users; set it
-above and it never sees `CCL0068` at 5.5/day. Only a per-user baseline separates
-them, and CUSUM's sustained-shift requirement is what keeps a 1.8× rise on a
-quiet user from being dismissed as noise. The signal CASSANDRA was built for —
-*this entity is behaving unlike itself, persistently* — survives transfer from a
-synthetic payment economy to an independently generated corporate-workstation
-dataset.
+**What this means (the honest reading).** The false-alarm behaviour transferred
+and the sensitivity did not.
 
-**What this does not establish.** Without `answers/insiders.csv` there is no
-confirmation that `CCL0068` is a red-team insider, and **no recall figure at
-all**. The ramp profile matches the removable-media exfil scenario closely enough
-to be a strong candidate, but "strong candidate" is the claim, not "true
-positive." Equally, if several scenario-1 insiders sit inside those 264 users,
-flagging one of them would be *poor* recall — that possibility is open and this
-run cannot close it. The honest summary is: **CASSANDRA reduced 264 users to a
-single tractable candidate with a textbook slow-exfil shape, and whether that
-candidate set is the right one remains unverified.**
+1. **The operating point holds up as a precision guarantee.** Zero false alarms
+   across 195 benign users on an independently generated dataset, including ten
+   users who move 23–27 files every working day for 500 days — CASSANDRA stays
+   silent on all of them because for *them* that volume is normal. A global
+   threshold cannot do this: set it below ~24/day and it fires forever on those
+   ten; set it above and it sees nothing else. The per-entity baseline earns its
+   complexity.
+2. **Recall did not transfer — 1 of 30 on scenario 2, the only scenario whose
+   shape matches CASSANDRA's threat model.** That is the number that matters, and
+   it is poor.
 
-To finish: download `answers.tar.bz2` from the KiltHub page, drop `insiders.csv`
-(or the `answers/` tree) anywhere under `training/datasets/r4.2/`, and re-run the
-command in [training/README.md](../training/README.md). The harness detects the
-labels and switches from this unsupervised mode to detection rate, median/max
-delay, and a benign false-alarm rate.
+**Why, measured.** CUSUM only accumulates evidence while the standardized
+per-bucket deviation exceeds its allowance `k`; below `k` the statistic drains
+toward zero. CASSANDRA ships `k = 0.75σ`. The amplitude of CERT's scenario-2
+exfil windows, measured on the same zero-filled daily series the detector
+consumes, is a median of **0.29σ** and a maximum of **0.48σ** — **0 of 30 reach
+the allowance.** These are not near misses; every scenario-2 insider sits below
+the detector's design floor. CERT's red team models an adversary who raises a
+~1.4 copies/day habit to ~2.0 over two months. `k = 0.75σ` encodes the assumption
+that exfil-shaped drift is a ≥1.5σ shift, which is true of the synthetic LTI
+economy it was tuned against (see [CASSANDRA's design notes](../services/cassandra/README.md))
+and false here.
+
+That reframes the one detection. `CCL0068` sits at 0.48σ — tied for the largest
+shift in the cohort, still well under `k` — and `VSS0154` at the same amplitude
+was missed. The alarm came from day-to-day fluctuation transiently carrying
+individual buckets over `k`, not from the designed signal clearing it. **The
+correct reading is a favourable draw at the edge of the population, not evidence
+that the shipped sensitivity works at this amplitude.**
+
+**Scenario 1 is a design boundary, not a tuning miss.** All 29 observable
+scenario-1 insiders have *zero* days of removable-media history before their
+attack — their entire observed activity *is* the exfiltration. A per-entity
+baseline detector cannot fire on principle here: the cold-start guard that stops
+it from false-alarming on every new payer also blinds it to "never did X,
+suddenly does X". Catching that class needs a *population* baseline — is this
+user behaving unlike their peer cohort? — which CASSANDRA does not have and
+ARGUS, which profiles per-entity rather than cross-entity, does not supply
+either. This is a real, named gap in the GUARDIAN triad rather than a knob to
+turn.
+
+**Conclusion.** CASSANDRA's detector *class* transfers — a per-entity CUSUM
+separates heavy-but-stable users from a drifting one on data it was never tuned
+on, at a measured 0.000% false-alarm rate. Its shipped *sensitivity* does not:
+calibrated for the LTI economy's ≥1.5σ drift, it is blind to a CERT-grade slow
+exfil an order of magnitude subtler, and structurally blind to insiders with no
+prior baseline. Lowering `k` would buy scenario-2 recall directly at the cost of
+the false-alarm budget the [CUSUM tuning work](../services/cassandra/README.md)
+was built to protect — a trade this validation now quantifies instead of leaving
+to guesswork. **The production detector is deliberately left as shipped:** it
+defends the LTI payment economy, where its amplitude assumption is the measured
+one, and this result marks the boundary of that claim rather than papering over
+it.
 
 ## Reproducing
 
