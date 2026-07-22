@@ -96,11 +96,37 @@
 }
 
 /* hero figure: proportional digits (no tabular-nums at display size) */
+.scoreLine {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .score {
   font-size: 48px;
   font-weight: 600;
   line-height: 1.15;
   color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.corroboration {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  border-radius: 3px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.corrStrong {
+  color: var(--level-critical);
+  border: 1px solid color-mix(in srgb, var(--level-critical) 45%, transparent);
+}
+
+.corrWeak {
+  color: var(--text-2);
+  border: 1px solid var(--line);
 }
 
 .gauge {

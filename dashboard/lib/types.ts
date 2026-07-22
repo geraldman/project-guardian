@@ -111,6 +111,18 @@ export interface NarrativeReport {
   generated_at: string;
 }
 
+export type ModelName = "argus" | "sentinel" | "cassandra";
+
+// Derived client-side by differencing each scorer's cumulative `events_consumed`
+// between polls; fusion exposes no rate of its own. null while a first delta is
+// still unavailable, or after a counter reset (service restart) makes it bogus.
+export interface ScorerRate {
+  eventsPerSecond: number | null;
+  alerts: number | null;
+}
+
+export type ScorerRates = Record<ModelName, ScorerRate>;
+
 // Component prop contracts (frozen — page.tsx passes exactly these).
 export interface ThreatIndicatorProps {
   snapshot: PulseSnapshot | null;
@@ -124,6 +136,16 @@ export interface TransitionLogProps {
 
 export interface HeartbeatRowProps {
   snapshot: PulseSnapshot | null;
+  rates: ScorerRates | null;
+}
+
+export interface TopEntitiesProps {
+  snapshot: PulseSnapshot | null;
+}
+
+export interface ContextStripProps {
+  snapshot: PulseSnapshot | null;
+  rates: ScorerRates | null;
 }
 
 export interface NarrativePanelProps {

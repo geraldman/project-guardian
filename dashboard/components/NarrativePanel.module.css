@@ -1,8 +1,17 @@
+/* The one prose surface in the HUD: sans-serif and a comfortable measure, so a
+   paragraph reads at a glance instead of like a log line. */
 .root {
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+  font-family: var(--font-sans);
+}
+
+.root .headline,
+.root .para,
+.root .bullets li {
+  max-width: 78ch;
 }
 
 .empty {
