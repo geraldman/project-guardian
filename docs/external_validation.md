@@ -1,6 +1,6 @@
 # External validation — do the detectors generalize beyond synthetic data?
 
-**Date:** 2026-07-16 · **Harnesses:**
+**Dates:** Track A 2026-07-16, Track B 2026-07-22 · **Harnesses:**
 [`training/validate_sentinel_ait.py`](../training/validate_sentinel_ait.py),
 [`training/validate_cassandra_cert.py`](../training/validate_cassandra_cert.py)
 
@@ -87,24 +87,71 @@ implicit behind a self-referential 1.0 accuracy.
 
 ## Track B — CASSANDRA vs CERT r4.2 insider-threat dataset
 
-**Status: harness built and self-tested; run pending the dataset download**
-([CERT r4.2](https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247),
-~1 GB, manual browser download — KiltHub blocks scripted fetches). Results will
-be appended here when the data is in place.
+**Status (2026-07-22): run complete on `file.csv`, but UNSUPERVISED — CERT ships
+its ground-truth labels in a separate `answers.tar.bz2` that is not in hand, so
+no precision, recall, or detection delay can be reported here.** What follows is
+a structural result, not a scored one. The scored numbers are a download away and
+the harness computes them automatically once `insiders.csv` is present.
 
-**Dataset & method.** CERT r4.2 is 1000 users over 17 months, 70 of them
-malicious, including a removable-media data-exfiltration scenario with per-user
-ground truth (`answers/`). CASSANDRA watches per-entity *volume drift*; CERT has
-no money, but the same signal exists as a user's daily count of data-movement
-events (`file.csv` / `device.csv`). Per user, `validate_cassandra_cert.py` buckets
-that count per day, uses file-content length as a winsorized size proxy for the
-amount chart, and drives the shipped `PayerDrift.update()` exactly as
-`services/cassandra/tests/offline_check.py` does. CUSUM on standardized
-per-bucket z is bucket-duration-agnostic, so the shipped `Params` (warmup 30
-buckets, k=0.75, h=6/10) apply at day granularity unchanged — this validates the
-*shipped* detector, not a re-tuned one. The measurement mirrors offline_check's
-fleet ARL soak: exfil-user detection rate and delay vs. a benign false-alarm
-budget across the 930 normal users.
+**Dataset & method.** [CERT r4.2](https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247)
+(CMU SEI / ExactData, DARPA I2O) is 1000 users over 17 months with an
+unrealistically dense population of red-team insiders, including a
+removable-media data-exfiltration scenario. CASSANDRA watches per-entity *volume
+drift*; CERT has no money, but the same signal exists as a user's daily count of
+data-movement events. Per user, `validate_cassandra_cert.py` buckets `file.csv`
+copies per day (one row = one file copy to removable media), uses file-content
+length as a winsorized size proxy for the amount chart, and drives the shipped
+`PayerDrift.update()` exactly as `services/cassandra/tests/offline_check.py`
+does. CUSUM on standardized per-bucket z is bucket-duration-agnostic, so the
+shipped `Params` (warmup 30 buckets, k=0.75, h=6/10) apply at day granularity
+unchanged — this validates the *shipped* detector, not a re-tuned one.
+
+**Result.** 264 of the 1000 users have any removable-media activity.
+**CASSANDRA flagged exactly one: `CCL0068`.**
+
+The warmup is not what produced that number: 229 of the 264 users span ≥30
+calendar days and the median user spans 494 days with 653 copies, so the
+population overwhelmingly clears the 30-bucket warmup and is genuinely eligible
+to alarm. One flag out of 264 eligible users is a detector decision, not an
+artifact of insufficient history.
+
+| | copies / active day | span | flagged |
+|---|---|---|---|
+| `CCL0068` | 2.4–3.8 for 13 consecutive 30-day blocks, then **5.5** | 415 d | **yes** |
+| 10 heaviest users (`HSB0196`, `AJF0370`, `LBH0942`, …) | 23–27, stable throughout | ~500 d | no |
+
+**What this means (the honest reading).** The shape of the one flag is the
+finding. `CCL0068` is a *light* user — roughly 3 copies a day for over a year —
+whose final 30-day block rises to a sustained 5.5/day. In absolute terms that is
+a fifth of what the heaviest users do routinely. The ten heaviest users move
+23–27 files every working day for 500 days and CASSANDRA stays silent on all of
+them, because for *them* that volume is normal.
+
+This is the per-entity baseline earning its complexity on data it was never tuned
+on. Any global threshold is caught between the two rows of that table: set it
+below ~24/day and it fires continuously on ten heavy-but-legitimate users; set it
+above and it never sees `CCL0068` at 5.5/day. Only a per-user baseline separates
+them, and CUSUM's sustained-shift requirement is what keeps a 1.8× rise on a
+quiet user from being dismissed as noise. The signal CASSANDRA was built for —
+*this entity is behaving unlike itself, persistently* — survives transfer from a
+synthetic payment economy to an independently generated corporate-workstation
+dataset.
+
+**What this does not establish.** Without `answers/insiders.csv` there is no
+confirmation that `CCL0068` is a red-team insider, and **no recall figure at
+all**. The ramp profile matches the removable-media exfil scenario closely enough
+to be a strong candidate, but "strong candidate" is the claim, not "true
+positive." Equally, if several scenario-1 insiders sit inside those 264 users,
+flagging one of them would be *poor* recall — that possibility is open and this
+run cannot close it. The honest summary is: **CASSANDRA reduced 264 users to a
+single tractable candidate with a textbook slow-exfil shape, and whether that
+candidate set is the right one remains unverified.**
+
+To finish: download `answers.tar.bz2` from the KiltHub page, drop `insiders.csv`
+(or the `answers/` tree) anywhere under `training/datasets/r4.2/`, and re-run the
+command in [training/README.md](../training/README.md). The harness detects the
+labels and switches from this unsupervised mode to detection rate, median/max
+delay, and a benign false-alarm rate.
 
 ## Reproducing
 

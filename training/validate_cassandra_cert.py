@@ -143,29 +143,46 @@ def evaluate(dataset: Path) -> dict:
         return {}
     p = Params()
 
-    results: dict[str, object] = {"insiders_found": len(insiders)}
+    # One pass: which users CASSANDRA flags for removable-media volume drift.
+    flagged: dict[str, int] = {}  # user -> first alarm day
+    for user, days in activity.items():
+        alarm_day = run_user(days, p)
+        if alarm_day is not None:
+            flagged[user] = alarm_day
+
+    results: dict[str, object] = {
+        "total_users": len(activity),
+        "flagged_users": len(flagged),
+        "has_labels": bool(insiders),
+    }
+    if not insiders:
+        # No ground-truth answers file present (CERT ships it separately). Report
+        # the flagged set unsupervised — still shows the detector yields a small,
+        # tractable candidate set on real independent data.
+        top = sorted(flagged.items(), key=lambda kv: kv[1])
+        results["flagged_sample"] = top[:25]
+        return results
+
     hits = 0
     delays: list[int] = []
     missed: list[str] = []
     for user, start_day in insiders.items():
-        alarm_day = run_user(activity.get(user, {}), p)
+        alarm_day = flagged.get(user)
         if alarm_day is not None and alarm_day >= start_day - 1:
             hits += 1
             delays.append(alarm_day - start_day)
         else:
             missed.append(user)
-
-    benign_users = [u for u in activity if u not in insiders]
-    benign_alarms = sum(1 for u in benign_users if run_user(activity[u], p) is not None)
-
+    benign_flagged = sum(1 for u in flagged if u not in insiders)
+    benign_total = len(activity) - len(insiders)
     results.update({
         "malicious_users": len(insiders),
         "detected": hits,
         "missed": missed,
         "median_delay_days": sorted(delays)[len(delays) // 2] if delays else None,
         "max_delay_days": max(delays) if delays else None,
-        "benign_users": len(benign_users),
-        "benign_alarms": benign_alarms,
+        "benign_users": benign_total,
+        "benign_alarms": benign_flagged,
     })
     return results
 
@@ -202,6 +219,16 @@ def main() -> int:
         print("ERROR: no activity parsed — check the dataset layout", file=sys.stderr)
         return 1
     print("\n## CASSANDRA vs CERT r4.2 — removable-media exfil drift")
+    print(f"users with removable-media activity: {r['total_users']}")
+    print(f"flagged by CASSANDRA drift: {r['flagged_users']}")
+    if not r["has_labels"]:
+        print("\nNo ground-truth answers file found (CERT ships answers.tar.bz2 "
+              "separately). Reporting the flagged set unsupervised — add answers/"
+              "insiders.csv under the dataset root for precision/recall.")
+        print("first-flagged users (user, day-index):")
+        for user, day in r["flagged_sample"]:
+            print(f"  {user}  day {day}")
+        return 0
     print(f"malicious users with a start day: {r['malicious_users']}")
     print(f"detected: {r['detected']} / {r['malicious_users']}  "
           f"(median delay {r['median_delay_days']}d, max {r['max_delay_days']}d)")

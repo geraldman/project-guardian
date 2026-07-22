@@ -26,6 +26,10 @@ that learns "normal" from the traffic it observes.
 # datasets go under training/datasets/ (gitignored)
 #   AIT-LDS v1.1  -> https://zenodo.org/records/4264796  (AIT-LDS-v1_1.zip, ~3.4 GB)
 #   CERT r4.2     -> https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247
+#     r4.2.tar.bz2 holds the activity logs; only file.csv is needed (stream out
+#     the single member — the unpacked tree is ~30 GB). GROUND TRUTH IS A
+#     SEPARATE download on the same page, answers.tar.bz2; without it the
+#     validator runs unsupervised and reports only the flagged set.
 
 # SENTINEL needs a 3.13 venv (numpy/xgboost/drain3 lack 3.14 wheels):
 py -3.13 -m venv .venv-val
