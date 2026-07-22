@@ -58,13 +58,19 @@ def parse_day(ts: str) -> int | None:
     return int(dt.timestamp() // _DAY)
 
 
-def read_insiders(dataset: Path) -> dict[str, int]:
-    """user -> first malicious day, from answers/insiders.csv (columns include
-    dataset,scenario,details,user,start,end). Only r4.2 rows are kept."""
+def read_insiders(dataset: Path) -> dict[str, tuple[int, int]]:
+    """user -> (first malicious day, scenario), from answers/insiders.csv (columns
+    dataset,scenario,details,user,start,end). Only r4.2 rows are kept.
+
+    Scenario matters for reading the result: r4.2 scenario 1 is "user who did NOT
+    previously use removable drives starts using one", so those users have no
+    pre-attack baseline at all; scenario 2 is "user escalates thumb-drive use to
+    steal data", which is the only one whose shape matches what CASSANDRA watches.
+    """
     path = next((p for p in dataset.rglob("insiders.csv")), None)
     if path is None:
         return {}
-    out: dict[str, int] = {}
+    out: dict[str, tuple[int, int]] = {}
     with path.open(encoding="utf-8", errors="replace") as f:
         for row in csv.DictReader(f):
             ds = (row.get("dataset") or "").strip()
@@ -75,9 +81,41 @@ def read_insiders(dataset: Path) -> dict[str, int]:
             if not user or not start:
                 continue
             day = parse_day(start) or parse_day(start + " 00:00:00")
-            if day is not None:
-                out[user] = day
+            if day is None:
+                continue
+            end = (row.get("end") or "").strip()
+            end_day = parse_day(end) or parse_day(end + " 00:00:00") or day
+            try:
+                scen = int((row.get("scenario") or "0").strip())
+            except ValueError:
+                scen = 0
+            out[user] = (day, end_day, scen)
     return out
+
+
+def shift_sigma(days: dict[int, tuple[int, float]], start: int, end: int,
+                warmup: int) -> float | None:
+    """Standardized amplitude of the exfil window: (mean in-window count - mean
+    pre-window count) / pre-window sigma, over the zero-filled per-calendar-day
+    series the detector actually consumes.
+
+    This is the quantity CUSUM compares against its allowance k: per-bucket
+    evidence only accumulates while the standardized deviation exceeds k, and
+    below k the statistic drains toward zero. A window whose amplitude sits under
+    k is therefore below the detector's design floor, not a near miss.
+    """
+    if not days:
+        return None
+    lo = min(days)
+    pre = [days.get(d, (0, 0.0))[0] for d in range(lo, start)]
+    win = [days.get(d, (0, 0.0))[0] for d in range(start, end + 1)]
+    if len(pre) < warmup or not win:
+        return None
+    mu = sum(pre) / len(pre)
+    var = sum((c - mu) ** 2 for c in pre) / len(pre)
+    if var <= 0:
+        return None
+    return (sum(win) / len(win) - mu) / (var ** 0.5)
 
 
 def load_activity(dataset: Path) -> dict[str, dict[int, tuple[int, float]]]:
@@ -166,23 +204,49 @@ def evaluate(dataset: Path) -> dict:
     hits = 0
     delays: list[int] = []
     missed: list[str] = []
-    for user, start_day in insiders.items():
+    # Per scenario: how many insiders exist, how many are even observable in this
+    # modality, how many have >=warmup buckets of history BEFORE their exfil window
+    # (without that a per-entity baseline detector cannot fire on principle), and
+    # how many were caught.
+    scen: dict[int, dict[str, int]] = {}
+    amplitudes: dict[int, list[float]] = {}
+    for user, (start_day, end_day, s) in insiders.items():
+        row = scen.setdefault(s, {"insiders": 0, "observable": 0,
+                                  "with_baseline": 0, "detected": 0})
+        row["insiders"] += 1
+        days = activity.get(user)
+        if days:
+            row["observable"] += 1
+            if (start_day - min(days)) >= p.warmup_buckets:
+                row["with_baseline"] += 1
+            z = shift_sigma(days, start_day, end_day, p.warmup_buckets)
+            if z is not None:
+                amplitudes.setdefault(s, []).append(z)
         alarm_day = flagged.get(user)
         if alarm_day is not None and alarm_day >= start_day - 1:
             hits += 1
             delays.append(alarm_day - start_day)
+            row["detected"] += 1
         else:
             missed.append(user)
+
+    # Benign denominator = users with activity who are NOT insiders. Not
+    # len(activity) - len(insiders): some insiders never touch removable media at
+    # all, so subtracting all of them understates the benign population.
     benign_flagged = sum(1 for u in flagged if u not in insiders)
-    benign_total = len(activity) - len(insiders)
+    benign_total = sum(1 for u in activity if u not in insiders)
     results.update({
         "malicious_users": len(insiders),
+        "observable_malicious": sum(1 for u in insiders if activity.get(u)),
         "detected": hits,
         "missed": missed,
         "median_delay_days": sorted(delays)[len(delays) // 2] if delays else None,
         "max_delay_days": max(delays) if delays else None,
         "benign_users": benign_total,
         "benign_alarms": benign_flagged,
+        "by_scenario": scen,
+        "amplitudes": amplitudes,
+        "cusum_k": p.cusum_k,
     })
     return results
 
@@ -229,11 +293,29 @@ def main() -> int:
         for user, day in r["flagged_sample"]:
             print(f"  {user}  day {day}")
         return 0
-    print(f"malicious users with a start day: {r['malicious_users']}")
+    print(f"malicious users with a start day: {r['malicious_users']}  "
+          f"(observable in this modality: {r['observable_malicious']})")
     print(f"detected: {r['detected']} / {r['malicious_users']}  "
           f"(median delay {r['median_delay_days']}d, max {r['max_delay_days']}d)")
+    print("\nby scenario (observable = has removable-media activity at all; "
+          "baseline = >=30 buckets of history BEFORE the exfil window, without "
+          "which a per-entity detector cannot fire on principle):")
+    print("  scenario | insiders | observable | with baseline | detected")
+    for s in sorted(r["by_scenario"]):
+        row = r["by_scenario"][s]
+        print(f"      {s}    |   {row['insiders']:4d}   |    {row['observable']:4d}    "
+              f"|     {row['with_baseline']:4d}      |   {row['detected']:4d}")
+    k = r["cusum_k"]
+    if r["amplitudes"]:
+        print(f"\nexfil-window amplitude vs the CUSUM allowance (k={k} sigma) — "
+              "evidence only accumulates above k:")
+        for s in sorted(r["amplitudes"]):
+            zs = sorted(r["amplitudes"][s])
+            over = sum(1 for z in zs if z > k)
+            print(f"  scenario {s}: n={len(zs):3d}  median {zs[len(zs)//2]:5.2f} sigma  "
+                  f"max {zs[-1]:5.2f} sigma  above k: {over}/{len(zs)}")
     if r["missed"]:
-        print(f"missed users: {', '.join(r['missed'][:20])}"
+        print(f"\nmissed users: {', '.join(r['missed'][:20])}"
               + (" ..." if len(r["missed"]) > 20 else ""))
     fp_rate = r["benign_alarms"] / r["benign_users"] if r["benign_users"] else 0.0
     print(f"benign users: {r['benign_users']}  false-alarm users: {r['benign_alarms']}  "
