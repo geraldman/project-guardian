@@ -184,6 +184,7 @@ happen for each, are in the [User Manual](docs/user_manual.md#7-driving-the-atta
 | [docs/admin_manual.md](docs/admin_manual.md) | Running and maintaining it: services, configuration, volumes, tuning, retraining, troubleshooting |
 | [docs/architecture.md](docs/architecture.md) | The design and the pinned cross-service contracts |
 | [docs/load_test.md](docs/load_test.md) | Measured throughput and RAM: the 5M events/day sustained run, ceiling search, and bottleneck analysis |
+| [docs/external_validation.md](docs/external_validation.md) | SENTINEL/CASSANDRA vs independent public datasets (AIT-LDS, CERT) — what generalizes beyond the synthetic data, and what honestly doesn't |
 
 Each service also documents its own design, knobs, and endpoints in its README —
 [mock-lti](services/mock-lti/README.md), [capture](services/capture/README.md),

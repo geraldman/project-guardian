@@ -297,6 +297,13 @@ credential stuffing, scanner probes. Entity is `client_ip` or a payer window.
 
 Anomalous windows raise `alert.type: "log_classification"` (`alert.source: "sentinel"`).
 
+External validation (AIT-LDS v1.1, independent ground truth): SENTINEL's stack-agnostic
+signatures (traversal, SQL metacharacters, sensitive-file probes) transfer to
+independently-generated attacks at a ~0.3% false-positive rate, while its
+application-tuned layer is specific to the LTI gateway and does not generalize to a
+foreign app — which is why the model is never retrained on outside data. Full method and
+numbers in [external_validation.md](external_validation.md).
+
 ### CASSANDRA — cumulative per-payer drift (`score.model: "cassandra"`)
 
 Consumes normalized events, aggregates per-payer buckets, and runs a CUSUM (and/or
