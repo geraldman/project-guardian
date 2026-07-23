@@ -18,7 +18,17 @@ Both validators reuse the **shipped** detection code and never retrain the model
 [docs/external_validation.md](../docs/external_validation.md) for method and results.
 
 ARGUS itself needs no external training data: it is an unsupervised baseline profiler
-that learns "normal" from the traffic it observes.
+that learns "normal" from the traffic it observes. Its **offline validation** lives with
+the service (`services/argus/tests/offline_check.py`) rather than here — like CASSANDRA's
+`offline_check.py` it drives the shipped detectors through synthetic attacks + benign
+soak. It imports the multivariate scorer (real sklearn), so it runs in the 3.13 venv
+below, not host 3.14:
+
+```sh
+# needs scikit-learn on top of the SENTINEL venv deps:
+.venv-val/Scripts/python.exe -m pip install scikit-learn==1.6.1
+.venv-val/Scripts/python.exe services/argus/tests/offline_check.py
+```
 
 ### Running the external validators
 
