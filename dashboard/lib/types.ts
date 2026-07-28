@@ -167,6 +167,30 @@ export interface TrafficSummary {
   top_patterns: TopCount[]; // attack_pattern breakdown within the window
 }
 
+// ── Alert feed (GET /api/alerts) ────────────────────────────────────────────
+// The emitted alert stream from guardian-alerts-* — everything the detectors
+// and fusion raised, BEFORE the notifier's 5-minute dedup (the dedup counters
+// in the context strip tell that half of the story).
+
+export type AlertSeverity = "high" | "medium" | "low";
+
+export interface AlertItem {
+  t: string; // @timestamp
+  id: string;
+  source: string; // argus | sentinel | cassandra | guardian (fusion)
+  type: string; // rate_spike, log_classification, slow_exfiltration, …
+  severity: AlertSeverity | string;
+  score: number | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  summary: string | null;
+}
+
+export interface AlertFeedData {
+  total_24h: number; // total emitted in the last 24h (feed shows the newest slice)
+  alerts: AlertItem[];
+}
+
 // ── Entity drilldown (GET /api/entity?type=..&id=..) ────────────────────────
 // The "case file" behind a Top Entities row: each detector's own baseline
 // state plus the raw events, so the verdict is inspectable, not asserted.

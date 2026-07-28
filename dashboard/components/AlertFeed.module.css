@@ -1,0 +1,150 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.count {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+  /* Side-rail budget: the feed scrolls inside itself, it never squeezes the
+     transition log or the freeze button out of view. */
+  max-height: 340px;
+  margin: 0 -6px;
+}
+
+/* Severity rides the row edge — reserved status hues, never the text. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 6px;
+  border-left: 2px solid transparent;
+  border-radius: 3px;
+}
+
+.row:nth-child(odd) {
+  background: color-mix(in srgb, var(--bg-2) 45%, transparent);
+}
+
+.sevHigh {
+  border-left-color: var(--level-critical);
+}
+
+.sevMedium {
+  border-left-color: var(--level-elevated);
+}
+
+.sevLow {
+  border-left-color: var(--line);
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.time {
+  font-size: 11px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.source {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex: none;
+}
+
+/* Model identity colors — same vocabulary as the Top Entities badges. Small
+   colored words, not colored value text. */
+.srcArgus {
+  color: var(--accent);
+}
+
+.srcSentinel {
+  color: #a371f7;
+}
+
+.srcCassandra {
+  color: #e3b341;
+}
+
+.srcGuardian {
+  color: var(--text-1);
+}
+
+.type {
+  font-size: 11px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.entity {
+  border: 0;
+  background: transparent;
+  color: var(--text-0);
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: left;
+}
+
+.entity:hover {
+  color: var(--accent);
+}
+
+.entityStatic {
+  font-size: 12px;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.score {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--text-2);
+  padding: 8px 0;
+}
