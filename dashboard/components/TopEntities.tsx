@@ -28,10 +28,34 @@ function readableReason(reason: string): string {
   return tag.replace(/_/g, " ");
 }
 
-function EntityRow({ entity, now }: { entity: TopEntity; now: number }) {
+function EntityRow({
+  entity,
+  now,
+  onSelect,
+}: {
+  entity: TopEntity;
+  now: number;
+  onSelect?: (entity: TopEntity) => void;
+}) {
   const score = Math.min(1, Math.max(0, entity.score));
   return (
-    <li className={styles.row}>
+    <li
+      className={`${styles.row} ${onSelect ? styles.rowClickable : ""}`}
+      onClick={onSelect ? () => onSelect(entity) : undefined}
+      onKeyDown={
+        onSelect
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(entity);
+              }
+            }
+          : undefined
+      }
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      title={onSelect ? "open case file" : undefined}
+    >
       <div className={styles.line}>
         <span className={styles.id} title={`${entity.entity_type}:${entity.entity_id}`}>
           {entity.entity_id}
@@ -83,7 +107,7 @@ function EntityRow({ entity, now }: { entity: TopEntity; now: number }) {
   );
 }
 
-export default function TopEntities({ snapshot }: TopEntitiesProps) {
+export default function TopEntities({ snapshot, onSelect }: TopEntitiesProps) {
   // Ages are relative to a ticking clock, not to the poll, so "12s" keeps
   // counting between snapshots instead of freezing for 5 seconds at a time.
   const [now, setNow] = useState(() => Date.now());
@@ -117,7 +141,7 @@ export default function TopEntities({ snapshot }: TopEntitiesProps) {
       ) : (
         <ol className={styles.list}>
           {entities.slice(0, VISIBLE).map((e) => (
-            <EntityRow key={`${e.entity_type}:${e.entity_id}`} entity={e} now={now} />
+            <EntityRow key={`${e.entity_type}:${e.entity_id}`} entity={e} now={now} onSelect={onSelect} />
           ))}
         </ol>
       )}

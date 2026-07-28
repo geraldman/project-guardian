@@ -19,6 +19,12 @@
   --offline: #6e7681;
   --accent: #39c5cf; /* sparingly: links, focus, sparkline line */
 
+  /* Chart series (validated: dataviz six-checks pass on both surfaces, incl.
+     protan/deutan separation — which is why the traffic chart is a blue/red
+     pair and NOT amber/red). Series colors are for marks only, never text. */
+  --viz-traffic: #5e94d4;
+  --viz-attack: #e34948;
+
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
   /* Prose only. Mono is right for telemetry and wrong for paragraphs — the
      narrative panel is the one place the HUD asks you to read sentences. */
@@ -175,10 +181,11 @@ a {
   display: grid;
   gap: var(--gap);
   grid-template-columns: minmax(300px, 4fr) minmax(320px, 5fr) minmax(250px, 3fr);
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   grid-template-areas:
     "threat     entities   side"
     "heartbeats heartbeats side"
+    "traffic    traffic    side"
     "narrative  narrative  side";
 }
 
@@ -193,6 +200,11 @@ a {
 
 .hud-area-heartbeats {
   grid-area: heartbeats;
+}
+
+.hud-area-traffic {
+  grid-area: traffic;
+  min-width: 0;
 }
 
 .hud-area-narrative {
@@ -214,6 +226,7 @@ a {
     grid-template-areas:
       "threat     entities"
       "heartbeats heartbeats"
+      "traffic    traffic"
       "narrative  side";
   }
 }
@@ -225,6 +238,7 @@ a {
       "threat"
       "entities"
       "heartbeats"
+      "traffic"
       "narrative"
       "side";
   }
