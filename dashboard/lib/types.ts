@@ -79,6 +79,20 @@ export interface DriftTop {
 
 export type SourceResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+// Shape of alerting's GET /stats (services/alerting/app/main.py): the deduper
+// counters spread at the top level plus delivery bookkeeping. This is what
+// makes the brief's 5-minute dedup window visible instead of implied.
+export interface AlertingStats {
+  sent: number;
+  suppressed: number;
+  tracked_keys: number;
+  delivered: number;
+  delivery_failures: number;
+  malformed_messages: number;
+  mode: string;
+  [k: string]: unknown;
+}
+
 export interface ScorerPulse {
   health: SourceResult<ScorerHealth>;
   stats: SourceResult<ScorerStats>;
@@ -88,6 +102,7 @@ export interface ScorerPulse {
 export interface PulseSnapshot {
   fetched_at: string; // server-side ISO timestamp; every source below is from this instant
   fusion: SourceResult<FusionThreat>;
+  alerting: SourceResult<AlertingStats>;
   scorers: {
     argus: ScorerPulse;
     sentinel: ScorerPulse;
@@ -122,6 +137,106 @@ export interface ScorerRate {
 }
 
 export type ScorerRates = Record<ModelName, ScorerRate>;
+
+// ── Traffic overview (GET /api/traffic) ─────────────────────────────────────
+// Server-side aggregations over guardian-traffic-*; the browser never sees a
+// raw OpenSearch response, only this reduced shape.
+
+export type TrafficWindow = "15m" | "1h" | "6h" | "24h";
+
+export interface TrafficBucket {
+  t: number; // bucket start, epoch ms
+  total: number;
+  declined: number;
+  errors: number;
+  attacks: number; // security.is_attack docs (overlay, subset of total)
+}
+
+export interface TopCount {
+  key: string;
+  count: number;
+}
+
+export interface TrafficSummary {
+  window: TrafficWindow;
+  interval_seconds: number;
+  buckets: TrafficBucket[];
+  totals: { events: number; declined: number; errors: number; attacks: number };
+  top_payers: TopCount[];
+  top_ips: TopCount[];
+  top_patterns: TopCount[]; // attack_pattern breakdown within the window
+}
+
+// ── Entity drilldown (GET /api/entity?type=..&id=..) ────────────────────────
+// The "case file" behind a Top Entities row: each detector's own baseline
+// state plus the raw events, so the verdict is inspectable, not asserted.
+
+export interface EwStatsState {
+  n: number;
+  mean: number;
+  var: number;
+}
+
+// ARGUS _baseline(): feature name -> EW stats (rate / error_rate / payload…,
+// keys are the pipeline's choice — render defensively).
+export interface ArgusBaseline {
+  entity_type: string;
+  entity_id: string;
+  warming_up: boolean;
+  features: Record<string, EwStatsState>;
+}
+
+// ARGUS /baseline/client_ip: cohort-wide, not per-IP (see docs/architecture.md).
+export interface ArgusIpCohort {
+  entity_type: "client_ip";
+  cohort: Record<string, unknown>;
+}
+
+// cassandra CusumSeries.to_dict()
+export interface CusumSeriesState {
+  baseline: EwStatsState;
+  s: number;
+  run: number;
+  ewma_z: number;
+  excursion_start: number | null; // epoch seconds
+}
+
+export interface CassandraBaseline {
+  entity_type: "payer";
+  entity_id: string;
+  warming_up: boolean;
+  buckets_observed: number;
+  volume: CusumSeriesState;
+  amount: CusumSeriesState;
+}
+
+// One normalized guardian-traffic-* doc, flattened for display.
+export interface EntityEvent {
+  t: string; // @timestamp
+  event_type: string | null;
+  service: string | null;
+  client_ip: string | null;
+  payer_id: string | null;
+  status: string | null;
+  amount: number | null;
+  currency: string | null;
+  latency_ms: number | null;
+  error: boolean;
+  is_attack: boolean;
+  attack_pattern: string | null;
+  message: string | null;
+}
+
+export interface EntityCaseFile {
+  entity_type: string;
+  entity_id: string;
+  fetched_at: string;
+  // null = structurally not applicable for this entity type (e.g. cassandra
+  // only baselines payers); SourceResult failure = applicable but unavailable.
+  argus: SourceResult<ArgusBaseline | ArgusIpCohort> | null;
+  cassandra: SourceResult<CassandraBaseline> | null;
+  events: SourceResult<EntityEvent[]>;
+}
 
 // Component prop contracts (frozen — page.tsx passes exactly these).
 export interface ThreatIndicatorProps {
