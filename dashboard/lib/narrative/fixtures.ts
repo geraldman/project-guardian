@@ -68,6 +68,8 @@ export function snapshotWith(
   return {
     fetched_at: FETCHED_AT,
     fusion: threat === null ? { ok: false, error: "fetch failed" } : { ok: true, data: threat },
+    // Narrative never reads alerting; fixtures keep it degraded on purpose.
+    alerting: { ok: false, error: "not in fixture" },
     scorers: { argus: s("argus"), sentinel: s("sentinel"), cassandra: s("cassandra") },
   };
 }
