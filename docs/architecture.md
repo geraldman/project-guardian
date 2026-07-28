@@ -375,19 +375,37 @@ The alerting service's `(entity_type, entity_id, type)` dedup applies unchanged.
 ## Presentation layer — Guardian Pulse HUD (Week 4)
 
 `guardian-pulse` (Next.js, `dashboard/`) is a read-only client of the detection layer:
-each 5-second poll gathers fusion's `/threat`, every scorer's `/health` + `/stats` and
-CASSANDRA's `/drift/top`, and renders the single-pane HUD — threat lamp + decayed-score
-gauge, per-model heartbeat cards, a deterministic template narrative, the session
-transition log, and a freeze-to-PDF compliance snapshot.
+each 5-second poll gathers fusion's `/threat`, every scorer's `/health` + `/stats`,
+CASSANDRA's `/drift/top` and alerting's `/stats`, and renders the single-pane HUD —
+threat lamp + decayed-score gauge, per-model heartbeat strip, a deterministic template
+narrative, the session transition log, and a freeze-to-PDF compliance snapshot.
+
+Beyond the poll, two on-demand views make the HUD an investigation tool rather than a
+status board:
+
+- **`GET /api/traffic?window=15m|1h|6h|24h`** — read-only aggregation queries against
+  `guardian-traffic-*` (date histogram at ~120 buckets per window, split into
+  total/declined/error/attack counts, plus top payers / source IPs / attack patterns).
+  This is what the wire-traffic timeline and its top-lists render.
+- **`GET /api/entity?type=payer|client_ip|global&id=…`** — the "case file" behind a
+  Top Entities row: ARGUS's baseline for the entity (`/baseline/payer/{id}`, the
+  cohort-wide `/baseline/client_ip`, or `/baseline/global`), CASSANDRA's per-payer CUSUM
+  state (`/baseline/payer/{id}`, payers only), and the entity's 20 most recent
+  normalized events from OpenSearch. The entity drilldown drawer renders this.
+
+Note on the write-path rule: "Vector is the single OpenSearch **write** path" is
+unchanged — the HUD holds a read-only search connection (server-side, basic auth from
+the compose env, the dev cluster's self-signed cert accepted only inside that one
+client) and never indexes anything.
 
 Two design points are contracts:
 
 - **Server-side proxy.** The browser only ever talks to `:3000`. The Next.js server
-  resolves `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` (docker-internal
-  hostnames from the compose block, `localhost` fallbacks for `npm run dev` on the host)
-  and fans all upstream calls out into one aggregate `GET /api/pulse` response with a
-  per-source `ok`/`error` envelope — a dead scorer degrades its panel, never the page,
-  and internal hostnames never reach client code.
+  resolves `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` /
+  `ALERTING_URL` / `OPENSEARCH_URL` (docker-internal hostnames from the compose block,
+  `localhost` fallbacks for `npm run dev` on the host) and fans all upstream calls out
+  into per-source `ok`/`error` envelopes — a dead upstream degrades its panel or
+  drawer section, never the page, and internal hostnames never reach client code.
 - **`GET /api/health` is pure liveness** (the compose healthcheck) and deliberately not
   gated on upstream reachability: `depends_on` already gates startup, and tying liveness
   to the scorers would flap the container whenever one restarts.

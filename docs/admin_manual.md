@@ -55,7 +55,7 @@ mock-lti → capture-agent → Redpanda (guardian.telemetry.raw) → Vector → 
 | 11 | `cassandra` | 8005 | build | Per-payer CUSUM slow-exfiltration detector | Baselines are volume-backed; resumes warm. |
 | 12 | `fusion` | 8006 | build | Folds all scores into one decayed threat state; serves `/threat` | State is in-memory by design; re-forms from the live stream in ~2 min. |
 | 13 | `alerting` | 8003 | build | 5-minute dedup + Slack/Discord delivery (plus an HTTP inlet for OpenSearch monitors) | Alerts accumulate on the queue and are delivered on restart. |
-| 14 | `guardian-pulse` | 3000 | build | Guardian Pulse HUD — Next.js single pane over fusion + the scorers (threat lamp, heartbeats, narrative, freeze-to-PDF) | Cosmetic — detection, storage and alerting are untouched. Stateless; restart freely. |
+| 14 | `guardian-pulse` | 3000 | build | Guardian Pulse HUD — Next.js single pane over fusion, the scorers, alerting and OpenSearch (threat lamp, heartbeats, wire-traffic view, entity drilldown, narrative, freeze-to-PDF) | Cosmetic — detection, storage and alerting are untouched. Stateless; restart freely. |
 
 Component-level detail lives with each component: `services/*/README.md`,
 `infra/vector/vector.yaml`, `infra/opensearch/*.json` (index templates, ISM policy,
@@ -106,7 +106,8 @@ editing `infra/docker-compose.yml`:
 | `SCORES_TOPIC` / `ALERTS_TOPIC` | `guardian.scores` / `guardian.alerts` | argus, sentinel, cassandra, fusion (alerting consumes `ALERTS_TOPIC`) |
 | `STATE_PATH` | `/data/argus_state.json` | argus |
 | `STATE_PATH` | `/data/cassandra_state.json` | cassandra |
-| `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` | `http://fusion:8006` etc. | guardian-pulse (server-side proxy targets; never exposed to the browser) |
+| `FUSION_URL` / `ARGUS_URL` / `SENTINEL_URL` / `CASSANDRA_URL` / `ALERTING_URL` | `http://fusion:8006` etc. | guardian-pulse (server-side proxy targets; never exposed to the browser) |
+| `OPENSEARCH_URL` / `OPENSEARCH_USER` / `OPENSEARCH_PASSWORD` | `https://opensearch:9200`, `admin`, `${OPENSEARCH_ADMIN_PASSWORD}` | guardian-pulse (read-only `_search` for the wire-traffic view + entity drilldown; the dev cluster's self-signed cert is accepted only inside this one client) |
 
 ### Service-level settings not surfaced in compose
 

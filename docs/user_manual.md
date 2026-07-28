@@ -268,13 +268,28 @@ above are the workhorse SIEM view (history, drill-down, evidence), Guardian Puls
   in the current state, and a sparkline of the score's recent history. A STALE badge
   means the HUD lost its own server; a grey "FUSION OFFLINE" lamp means fusion itself is
   unreachable.
-- **Model Heartbeats** — one vitals card per detector (ARGUS / SENTINEL / CASSANDRA):
+- **Entities Under Suspicion** — fusion's ranked suspects. **Click any row to open its
+  case file**: a drawer showing why the system believes what it believes — ARGUS's
+  learned baseline for the entity (mean ± σ per feature; IP baselines are cohort-wide
+  by design), CASSANDRA's CUSUM accumulators drawn against the real alarm thresholds,
+  the fusion reason tags, and the entity's 20 most recent raw events with attack/error
+  flags. `Esc` or a click outside closes it.
+- **Wire Traffic** — what is actually on the wire, straight from OpenSearch (so it
+  survives page reloads): an events/s timeline over the last 15m/1h/6h/24h with the
+  attack-flagged rate as its own line, a crosshair readout (hover for exact counts,
+  including errors and declines), window totals, and top payers / sources / attack
+  patterns. The payer and source entries are clickable and open the same case-file
+  drawer.
+- **Model Heartbeats** — one vitals column per detector (ARGUS / SENTINEL / CASSANDRA):
   status, warm-up progress, headline stats, and each model's current contribution to the
-  fused score. An unreachable scorer dims its own card; the others keep reporting.
+  fused score. An unreachable scorer dims its own column; the others keep reporting.
 - **Incident Narrative** — a plain-English summary of the current picture: what level,
   which models are driving it, which entities are corroborated, when it last escalated.
   Assembled from fixed templates — deterministic, not generative.
 - **Transitions** — the session's threat-level changes, newest first.
+- **Header strip** — pipeline vitals at a glance, including the alerting service's
+  `sent/deduped` counters: how many alerts went out versus how many the 5-minute
+  dedup window suppressed.
 - **Freeze to PDF** — one click freezes the current snapshot and narrative and opens the
   browser print dialog; choose "Save as PDF" for a light-theme, searchable compliance
   report (timestamps, threat state, model contributions, top entities, transitions,

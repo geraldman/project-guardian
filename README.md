@@ -95,7 +95,7 @@ Then open:
 | SENTINEL | http://localhost:8004/docs | Log-content classifier |
 | CASSANDRA | http://localhost:8005/docs | Slow-exfiltration detector |
 | fusion | http://localhost:8006/threat | **Unified threat picture** |
-| Guardian Pulse | http://localhost:3000 | **The live HUD** — threat lamp, model heartbeats, narrative, freeze-to-PDF |
+| Guardian Pulse | http://localhost:3000 | **The live HUD** — threat lamp, wire-traffic view, entity drilldown, model heartbeats, narrative, freeze-to-PDF |
 | OpenSearch API | https://localhost:9200 | Storage/index (self-signed TLS) |
 
 Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
@@ -105,9 +105,12 @@ Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
 ## Where to see results
 
 - **Guardian Pulse** (http://localhost:3000) — the single-pane HUD: fused threat level with
-  score gauge and history, one heartbeat card per detector, a template-based plain-English
-  incident narrative, and one-click **Freeze to PDF** compliance snapshots (the audit-trail
-  artifact).
+  score gauge and history, an OpenSearch-backed **wire-traffic timeline** (total vs
+  attack-flagged rate, 15m–24h windows, top payers/sources/patterns), **click-to-open
+  entity case files** (each detector's baseline for the suspect plus its recent raw
+  events), one heartbeat column per detector, a template-based plain-English incident
+  narrative, alert sent/deduped counters, and one-click **Freeze to PDF** compliance
+  snapshots (the audit-trail artifact).
 - **OpenSearch Dashboards** (http://localhost:5601) — three dashboards, all imported
   automatically at startup into the **Global** tenant: **Guardian Traffic Overview** (raw traffic),
   **Guardian Detection** (anomaly scores + live alert feed), and **Guardian Threat Fusion** (the
