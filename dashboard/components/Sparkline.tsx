@@ -49,7 +49,7 @@ export default function Sparkline({ points, thresholds }: SparklineProps) {
             strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         )}
         {/* end marker: zero-length round-cap strokes give an undistorted dot with a 2px surface ring */}
-        {last && <path d={dot} stroke="var(--bg-1)" strokeWidth={12} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
+        {last && <path d={dot} stroke="var(--bg-0)" strokeWidth={12} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
         {last && <path d={dot} stroke="var(--accent)" strokeWidth={8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
       </svg>
       {last && (

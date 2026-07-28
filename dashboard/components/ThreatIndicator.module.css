@@ -53,33 +53,33 @@
 }
 
 .lampDot {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--level);
   flex: none;
 }
 
 .lampLabel {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
   color: var(--level);
 }
 
+/* A plain opacity tick, not a glow — the state change should read as a
+   mechanical indicator, not ambience. */
 .lampPulse {
-  animation: lamp-pulse 1.6s ease-in-out infinite;
+  animation: lamp-pulse 1.6s steps(2, jump-none) infinite;
 }
 
 @keyframes lamp-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--level);
     opacity: 1;
   }
   50% {
-    box-shadow: 0 0 12px 3px var(--level);
-    opacity: 0.7;
+    opacity: 0.45;
   }
 }
 
@@ -95,7 +95,8 @@
   align-self: flex-end;
 }
 
-/* hero figure: proportional digits (no tabular-nums at display size) */
+/* Hero figure: the one number the whole page leads with. Nothing else on
+   screen comes close to this size — that gap IS the hierarchy. */
 .scoreLine {
   display: flex;
   align-items: baseline;
@@ -104,11 +105,11 @@
 }
 
 .score {
-  font-size: 48px;
-  font-weight: 600;
-  line-height: 1.15;
+  font-size: 68px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   color: var(--text-0);
-  font-variant-numeric: tabular-nums;
 }
 
 .corroboration {
@@ -135,9 +136,9 @@
 
 .gaugeTrack {
   position: relative;
-  height: 10px;
+  height: 8px;
   background: var(--bg-2);
-  border-radius: 5px;
+  border-radius: 2px;
 }
 
 .gaugeFill {
@@ -146,7 +147,7 @@
   bottom: 0;
   left: 0;
   background: var(--level);
-  border-radius: 5px 4px 4px 5px;
+  border-radius: 2px;
 }
 
 .gaugeTick {

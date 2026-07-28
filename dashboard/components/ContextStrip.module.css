@@ -24,6 +24,10 @@
   letter-spacing: 0.08em;
 }
 
+.valueDim {
+  color: var(--text-2);
+}
+
 .sep {
   width: 1px;
   height: 11px;
