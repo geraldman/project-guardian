@@ -6,6 +6,8 @@
 
 import { osSearch } from "./opensearch";
 import type {
+  AlertFeedData,
+  AlertItem,
   AlertingStats,
   ArgusBaseline,
   ArgusIpCohort,
@@ -177,6 +179,46 @@ export async function fetchTraffic(window: TrafficWindow): Promise<SourceResult<
       top_payers: terms(res.data.aggregations?.top_payers),
       top_ips: terms(res.data.aggregations?.top_ips),
       top_patterns: terms(res.data.aggregations?.top_patterns),
+    },
+  };
+}
+
+// ── Alert feed ──────────────────────────────────────────────────────────────
+
+interface OsAlertsResponse {
+  hits?: {
+    total?: { value?: number };
+    hits: Array<{ _source: Record<string, unknown> }>;
+  };
+}
+
+function toAlert(src: Record<string, unknown>): AlertItem {
+  return {
+    t: str(pick(src, ["@timestamp"])) ?? "",
+    id: str(pick(src, ["alert", "id"])) ?? "",
+    source: str(pick(src, ["alert", "source"])) ?? "unknown",
+    type: str(pick(src, ["alert", "type"])) ?? "unknown",
+    severity: str(pick(src, ["alert", "severity"])) ?? "low",
+    score: num(pick(src, ["alert", "score"])),
+    entity_type: str(pick(src, ["alert", "entity_type"])),
+    entity_id: str(pick(src, ["alert", "entity_id"])),
+    summary: str(pick(src, ["alert", "summary"])),
+  };
+}
+
+export async function fetchAlerts(limit: number): Promise<SourceResult<AlertFeedData>> {
+  const res = await osSearch<OsAlertsResponse>("guardian-alerts-*", {
+    size: Math.max(1, Math.min(limit, 100)),
+    query: { range: { "@timestamp": { gte: "now-24h", lte: "now" } } },
+    sort: [{ "@timestamp": { order: "desc" } }],
+    track_total_hits: true,
+  });
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    data: {
+      total_24h: res.data.hits?.total?.value ?? 0,
+      alerts: (res.data.hits?.hits ?? []).map((h) => toAlert(h._source ?? {})),
     },
   };
 }

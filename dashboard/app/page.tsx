@@ -17,6 +17,7 @@ import ContextStrip from "@/components/ContextStrip";
 import FreezeButton from "@/components/FreezeButton";
 import TrafficPanel from "@/components/TrafficPanel";
 import EntityDrawer from "@/components/EntityDrawer";
+import AlertFeed from "@/components/AlertFeed";
 
 export default function Home() {
   const { snapshot, history, status, rates } = usePulse();
@@ -61,6 +62,7 @@ export default function Home() {
         </section>
         <section className="hud-area-side">
           <TransitionLog snapshot={snapshot} />
+          <AlertFeed onSelect={selectByName} />
           <FreezeButton snapshot={snapshot} history={history} />
         </section>
         <section className="hud-area-heartbeats">
