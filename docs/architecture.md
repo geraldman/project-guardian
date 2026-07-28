@@ -387,6 +387,9 @@ status board:
   `guardian-traffic-*` (date histogram at ~120 buckets per window, split into
   total/declined/error/attack counts, plus top payers / source IPs / attack patterns).
   This is what the wire-traffic timeline and its top-lists render.
+- **`GET /api/alerts?limit=N`** — the newest slice of `guardian-alerts-*` (the emitted
+  alert stream, pre-dedup) with the 24h total. This feeds the side-rail Alert Feed;
+  the alerting service's sent/suppressed counters cover the delivery half.
 - **`GET /api/entity?type=payer|client_ip|global&id=…`** — the "case file" behind a
   Top Entities row: ARGUS's baseline for the entity (`/baseline/payer/{id}`, the
   cohort-wide `/baseline/client_ip`, or `/baseline/global`), CASSANDRA's per-payer CUSUM

@@ -109,8 +109,8 @@ Default OpenSearch admin password is `Guardian!Lti2026` (override by exporting
   attack-flagged rate, 15m–24h windows, top payers/sources/patterns), **click-to-open
   entity case files** (each detector's baseline for the suspect plus its recent raw
   events), one heartbeat column per detector, a template-based plain-English incident
-  narrative, alert sent/deduped counters, and one-click **Freeze to PDF** compliance
-  snapshots (the audit-trail artifact).
+  narrative, a live **alert feed** with per-alert drilldown, alert sent/deduped counters,
+  and one-click **Freeze to PDF** compliance snapshots (the audit-trail artifact).
 - **OpenSearch Dashboards** (http://localhost:5601) — three dashboards, all imported
   automatically at startup into the **Global** tenant: **Guardian Traffic Overview** (raw traffic),
   **Guardian Detection** (anomaly scores + live alert feed), and **Guardian Threat Fusion** (the

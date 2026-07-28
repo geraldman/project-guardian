@@ -265,7 +265,9 @@ above are the workhorse SIEM view (history, drill-down, evidence), Guardian Puls
 
 - **Threat Level** — fusion's fused verdict as a lamp (NORMAL / ELEVATED / CRITICAL),
   the decayed anomaly score against its alert thresholds, how long the platform has been
-  in the current state, and a sparkline of the score's recent history. A STALE badge
+  in the current state, and a sparkline of the score's recent history with the
+  elevated/critical hysteresis thresholds drawn and labeled — when the line crosses a
+  dashed threshold, that is the moment the level flipped. A STALE badge
   means the HUD lost its own server; a grey "FUSION OFFLINE" lamp means fusion itself is
   unreachable.
 - **Entities Under Suspicion** — fusion's ranked suspects. **Click any row to open its
@@ -287,6 +289,11 @@ above are the workhorse SIEM view (history, drill-down, evidence), Guardian Puls
   which models are driving it, which entities are corroborated, when it last escalated.
   Assembled from fixed templates — deterministic, not generative.
 - **Transitions** — the session's threat-level changes, newest first.
+- **Alert Feed** — the newest alerts the detectors and fusion actually emitted (from
+  the alert index, so it survives reloads), with the 24h total. Severity is the colored
+  row edge, the source model is named, and payer/IP entries are clickable — an alert is
+  two clicks from its case file. This is the *emitted* stream; what got delivered vs
+  suppressed by the 5-minute dedup window is the header's `sent/deduped` pair.
 - **Header strip** — pipeline vitals at a glance, including the alerting service's
   `sent/deduped` counters: how many alerts went out versus how many the 5-minute
   dedup window suppressed.
