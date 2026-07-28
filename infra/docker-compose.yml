@@ -299,6 +299,13 @@ services:
       ARGUS_URL: http://argus:8002
       SENTINEL_URL: http://sentinel:8004
       CASSANDRA_URL: http://cassandra:8005
+      ALERTING_URL: http://alerting:8003
+      # Read-only aggregation queries for the traffic view + entity drilldown.
+      # Dev cluster runs the bundled self-signed cert, hence the in-cluster
+      # https URL; the dashboard's client accepts it explicitly (dev-only).
+      OPENSEARCH_URL: https://opensearch:9200
+      OPENSEARCH_USER: admin
+      OPENSEARCH_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-Guardian!Lti2026}
     networks: [guardian-net]
     depends_on:
       fusion:
