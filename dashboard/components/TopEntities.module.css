@@ -45,6 +45,19 @@
   border-left-color: var(--line);
 }
 
+.rowClickable {
+  cursor: pointer;
+}
+
+.rowClickable:hover {
+  border-left-color: var(--accent);
+}
+
+.rowClickable:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .line {
   display: flex;
   align-items: center;

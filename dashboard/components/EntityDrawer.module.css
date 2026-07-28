@@ -1,0 +1,295 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--bg-0) 62%, transparent);
+  cursor: default;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 94vw);
+  background: var(--bg-1);
+  border-left: 1px solid var(--line);
+  padding: 18px 18px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-0);
+  word-break: break-all;
+}
+
+.close {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--text-1);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-0);
+  border-color: var(--text-2);
+}
+
+.verdict {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.scoreBig {
+  font-size: 30px;
+  font-weight: 650;
+  color: var(--text-0);
+  line-height: 1;
+}
+
+.corroborated {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--level-critical);
+  border: 1px solid color-mix(in srgb, var(--level-critical) 45%, transparent);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 10px;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border-radius: 3px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.sectionNote {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.dim {
+  color: var(--text-2);
+}
+
+/* stat rows (ARGUS baselines) */
+
+.statList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.statRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.statRow dt {
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.statRow dd {
+  font-size: 13px;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* CUSUM meters (CASSANDRA) */
+
+.meterBlock {
+  margin-bottom: 12px;
+}
+
+.meterHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-1);
+  margin-bottom: 5px;
+}
+
+.meterValue {
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.meterTrack {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-2);
+}
+
+.meterFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+  transition: width 240ms ease-out;
+}
+
+.fillCalm {
+  background: var(--accent);
+}
+
+.fillWarn {
+  background: var(--level-elevated);
+}
+
+.fillAlarm {
+  background: var(--level-critical);
+}
+
+.meterMark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text-1);
+}
+
+.meterMarkSingle {
+  background: var(--text-2);
+}
+
+.meterFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-1);
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* recent events */
+
+.eventsSection {
+  min-height: 0;
+}
+
+.events {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.eventRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.eventRow:nth-child(odd) {
+  background: color-mix(in srgb, var(--bg-2) 45%, transparent);
+}
+
+.eventTime {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.eventBody {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.eventCounterpart {
+  color: var(--text-0);
+}
+
+.eventFlags {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.flagAttack {
+  font-size: 10px;
+  color: var(--level-critical);
+  border: 1px solid color-mix(in srgb, var(--level-critical) 45%, transparent);
+  border-radius: 3px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
+.flagError {
+  font-size: 10px;
+  color: var(--level-elevated);
+  border: 1px solid color-mix(in srgb, var(--level-elevated) 45%, transparent);
+  border-radius: 3px;
+  padding: 0 5px;
+  white-space: nowrap;
+}

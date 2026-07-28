@@ -1,0 +1,230 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-1);
+  margin-right: auto;
+}
+
+.keyTraffic,
+.keyAttack {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.keyTraffic {
+  background: var(--viz-traffic);
+  margin-left: 8px;
+}
+
+.keyAttack {
+  background: var(--viz-attack);
+  margin-left: 8px;
+}
+
+.legend .keyTraffic:first-child {
+  margin-left: 0;
+}
+
+.windows {
+  display: flex;
+  gap: 2px;
+}
+
+.windowBtn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.windowBtn:hover {
+  color: var(--text-0);
+}
+
+.windowActive {
+  color: var(--text-0);
+  background: var(--bg-2);
+  border-color: var(--line);
+}
+
+.chartRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.yAxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 10px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  width: 34px;
+  /* first/last tick labels center on the plot's top/bottom edges */
+  margin: -5px 0;
+  padding: 0 0 0 2px;
+}
+
+.plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.tooltip {
+  position: absolute;
+  top: 6px;
+  transform: translateX(var(--flip, 0%));
+  margin-left: 8px;
+  background: color-mix(in srgb, var(--bg-0) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  font-size: 11px;
+  color: var(--text-0);
+  line-height: 1.6;
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+
+.tooltipTime {
+  color: var(--text-2);
+}
+
+.tooltipDim {
+  color: var(--text-2);
+}
+
+.xAxis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  padding: 4px 0 0 42px;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-2);
+  padding: 10px 0 2px 42px;
+}
+
+.totals b {
+  color: var(--text-0);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tables {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 780px) {
+  .tables {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.topList ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topList li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.topTitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+  margin-bottom: 5px;
+}
+
+.topKey {
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: left;
+}
+
+button.topKey:hover {
+  color: var(--accent);
+}
+
+.topKeyStatic {
+  cursor: default;
+}
+
+.topCount {
+  font-size: 12px;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.topEmpty {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--text-2);
+  font-size: 12px;
+}

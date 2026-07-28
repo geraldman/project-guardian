@@ -187,9 +187,10 @@ export interface ArgusBaseline {
 }
 
 // ARGUS /baseline/client_ip: cohort-wide, not per-IP (see docs/architecture.md).
+// The cohort is one EWStats over per-IP minute rates.
 export interface ArgusIpCohort {
   entity_type: "client_ip";
-  cohort: Record<string, unknown>;
+  cohort: EwStatsState;
 }
 
 // cassandra CusumSeries.to_dict()
@@ -256,6 +257,19 @@ export interface HeartbeatRowProps {
 
 export interface TopEntitiesProps {
   snapshot: PulseSnapshot | null;
+  // Opens the entity drilldown drawer; undefined renders the rows inert.
+  onSelect?: (entity: TopEntity) => void;
+}
+
+export interface EntityDrawerProps {
+  snapshot: PulseSnapshot | null; // for detector config (CUSUM h) + model chips
+  entity: TopEntity | null; // null = closed
+  onClose: () => void;
+}
+
+export interface TrafficPanelProps {
+  // Lets the top payers/sources lists open the same drilldown drawer.
+  onSelect?: (entityType: string, entityId: string) => void;
 }
 
 export interface ContextStripProps {
