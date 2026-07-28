@@ -155,19 +155,19 @@
 }
 
 /* Per-model identity, distinct from the threat-level palette so a model badge
-   is never mistaken for a severity signal. */
+   is never mistaken for a severity signal. Badge text wears the page ink. */
 .argus {
-  color: #0a0e14;
+  color: var(--bg-0);
   background: var(--accent);
 }
 
 .sentinel {
-  color: #0a0e14;
+  color: var(--bg-0);
   background: #a371f7;
 }
 
 .cassandra {
-  color: #0a0e14;
+  color: var(--bg-0);
   background: #e3b341;
 }
 

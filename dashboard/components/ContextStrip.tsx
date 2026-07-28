@@ -44,6 +44,10 @@ export default function ContextStrip({ snapshot, rates }: ContextStripProps) {
 
   const unknown = threat?.unknown_models ?? [];
 
+  // The alerting service's dedup counters: "sent/suppressed" is the 5-minute
+  // dedup window doing its job, visible instead of implied.
+  const alerting = snapshot?.alerting?.ok ? snapshot.alerting.data : null;
+
   return (
     <div className={styles.root}>
       <span className={styles.metric}>
@@ -65,6 +69,21 @@ export default function ContextStrip({ snapshot, rates }: ContextStripProps) {
         <span className={styles.value}>{fmtInt(num("alerts_emitted"))}</span>
         <span className={styles.label}>alerts</span>
       </span>
+      {alerting && (
+        <>
+          <span className={styles.sep} aria-hidden="true" />
+          <span
+            className={styles.metric}
+            title={`alert dedup: ${alerting.sent} sent, ${alerting.suppressed} suppressed by the 5-minute window`}
+          >
+            <span className={styles.value}>
+              {fmtInt(alerting.sent)}
+              <span className={styles.valueDim}>/{fmtInt(alerting.suppressed)}</span>
+            </span>
+            <span className={styles.label}>sent/deduped</span>
+          </span>
+        </>
+      )}
       <span className={styles.sep} aria-hidden="true" />
       <span className={styles.metric}>
         <span className={styles.value}>{ageSeconds === null ? "—" : `${ageSeconds}s`}</span>

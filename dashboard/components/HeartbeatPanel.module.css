@@ -3,27 +3,43 @@
    contribution bar is a magnitude and wears --accent, never a status color. */
 
 /* Three scorers side by side: the triad reads as one row of vitals rather than
-   a stack competing with the hero for vertical space. */
+   a stack competing with the hero for vertical space. Vertical hairlines, not
+   boxes, do the separating — same rule language as the page grid. */
 .stack {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+}
+
+.card {
+  padding: 2px 16px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.card:first-child {
+  padding-left: 2px;
+}
+
+.card + .card {
+  border-left: 1px solid var(--line);
 }
 
 @media (max-width: 780px) {
   .stack {
     grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
-}
 
-.card {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  .card {
+    padding: 2px;
+  }
+
+  .card + .card {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
 }
 
 .offline {
@@ -99,7 +115,8 @@
 }
 
 .eps {
-  font-size: 22px;
+  font-size: 26px;
+  font-weight: 500;
   line-height: 1;
   color: var(--text-0);
   font-variant-numeric: tabular-nums;

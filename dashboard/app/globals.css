@@ -4,20 +4,23 @@
    only (green=normal/ok, amber=elevated/warn, red=critical/error). */
 
 :root {
-  --bg-0: #0a0e14; /* page */
-  --bg-1: #10161f; /* panel */
-  --bg-2: #1a2230; /* inset / nested surface */
-  --line: #232d3d;
+  /* Warm graphite, not stock blue-navy: the neutral surfaces carry no hue so
+     the only colored things on screen are signals. */
+  --bg-0: #0d0e10; /* page — the chart surface the viz palette was validated on */
+  --bg-1: #14171c; /* raised surface: drawer, tooltips */
+  --bg-2: #1d2127; /* inset / nested surface */
+  --line: #24292f;
 
-  --text-0: #e6edf3;
-  --text-1: #9fb0c3;
-  --text-2: #5c6b80;
+  --text-0: #e8eaed;
+  --text-1: #9aa3ad;
+  --text-2: #646d77;
 
-  --level-normal: #3fb950;
-  --level-elevated: #d29922;
-  --level-critical: #f85149;
-  --offline: #6e7681;
-  --accent: #39c5cf; /* sparingly: links, focus, sparkline line */
+  /* One red in the whole system: critical == the attack series. */
+  --level-normal: #43b45c;
+  --level-elevated: #cf9a2a;
+  --level-critical: #e34948;
+  --offline: #6b7076;
+  --accent: #3fb8c4; /* one job: interactive/focus + the fusion score line */
 
   /* Chart series (validated: dataviz six-checks pass on both surfaces, incl.
      protan/deutan separation — which is why the traffic chart is a blue/red
@@ -25,12 +28,13 @@
   --viz-traffic: #5e94d4;
   --viz-attack: #e34948;
 
-  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --font-mono: var(--font-jb), ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo,
+    monospace;
   /* Prose only. Mono is right for telemetry and wrong for paragraphs — the
      narrative panel is the one place the HUD asks you to read sentences. */
   --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --radius: 6px;
-  --gap: 12px;
+  --radius: 3px;
+  --gap: 14px;
 }
 
 * {
@@ -71,9 +75,13 @@ a {
 
 /* ── Threat state as page-level treatment ─────────────────────────────────
    One lamp is not enough for a wall display. --state-color is set here and
-   consumed by the header rule and the ambient wash below, so severity is
-   readable before any text is. "offline" is deliberately grey, not green:
-   absence of data must never look like absence of threat. */
+   consumed by the state bar and header rule, so severity is readable before
+   any text is. "offline" is deliberately grey, not green: absence of data
+   must never look like absence of threat.
+
+   The signal is a hard 3px bar pinned to the top of the viewport — a crisp
+   mechanical state change, deliberately NOT an ambient gradient wash. A
+   terminal, not a lava lamp. */
 
 .hud-root[data-level="normal"] {
   --state-color: var(--level-normal);
@@ -95,29 +103,11 @@ a {
   content: "";
   position: fixed;
   inset: 0 0 auto 0;
-  height: 180px;
+  height: 3px;
+  z-index: 10;
   pointer-events: none;
-  z-index: 0;
-  opacity: 0;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--state-color, transparent) 16%, transparent),
-    transparent
-  );
-  transition: opacity 400ms ease-out;
-}
-
-.hud-root[data-level="elevated"]::before {
-  opacity: 0.75;
-}
-
-.hud-root[data-level="critical"]::before {
-  opacity: 1;
-}
-
-.hud-root > * {
-  position: relative;
-  z-index: 1;
+  background: var(--state-color, var(--line));
+  transition: background-color 300ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -148,9 +138,9 @@ a {
 }
 
 .hud-header h1 {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
 }
 
@@ -244,23 +234,51 @@ a {
   }
 }
 
-/* ── Shared panel primitive ───────────────────────────────────────────── */
+/* ── Shared panel primitive ─────────────────────────────────────────────
+   Panels are open regions, not cards: when everything sits in an identical
+   bordered box, nothing leads. Hierarchy comes from scale and from the
+   hairline rules between grid rows; boxes are reserved for true overlays
+   (drawer, tooltips) and insets. */
 
 .panel {
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 4px 2px;
   height: 100%;
   min-width: 0;
 }
 
 .panel-title {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   color: var(--text-2);
   margin-bottom: 10px;
+}
+
+/* Row rules: the full-width regions below the incident row each open with a
+   hairline; the side rail hangs off its own vertical rule. */
+.hud-area-heartbeats,
+.hud-area-traffic,
+.hud-area-narrative {
+  border-top: 1px solid var(--line);
+  padding-top: var(--gap);
+}
+
+.hud-area-side {
+  border-left: 1px solid var(--line);
+  padding-left: var(--gap);
+}
+
+@media (max-width: 1180px) {
+  .hud-area-side {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    padding-top: var(--gap);
+  }
 }
 
 .stub {
